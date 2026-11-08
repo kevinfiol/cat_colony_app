@@ -92,7 +92,7 @@
     <ul>
       {{#each feedings as feeding}}
         <li>
-          <a href="/admin/chat/{{ feeding.room_id }}">{{ feeding.name || 'A volunteer' }}</a>
+          <a href="/admin/chat/{{ feeding.room_slug }}">{{ feeding.name || 'A volunteer' }}</a>
           <small>{{ feeding.created_at }} UTC</small>
         </li>
       {{/each}}

@@ -200,7 +200,7 @@ const setCatStatus = tool({
 
 const agent = new Agent({
   name: 'Cat line',
-  model: 'gpt-5.4-mini',
+  model: 'gpt-5.4-nano',
   modelSettings: { reasoning: { effort: 'low' } },
   instructions: `
 You keep the census for Mangrove Mews, a street cat rescue in Miami.

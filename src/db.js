@@ -1,127 +1,36 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { slugify } from './slugify.js';
 
+// The schema lives in migrations/; run `pnpm migrate` first.
 const DB_PATH = process.env.DB_PATH || 'data/app.db';
-mkdirSync(dirname(DB_PATH), { recursive: true });
 export const db = new DatabaseSync(DB_PATH);
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS rooms (
-    id TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
+// Creates a named room. Its slug comes from the name, with a number added if it's taken.
+export function createRoom(name) {
+  // Strip accents first, so "María" becomes "maria", not "mara".
+  const base = slugify(name.normalize('NFD').replace(/\p{Diacritic}/gu, '')) || 'room';
+  let slug = base;
+  for (let n = 2; getRoom(slug); n++) slug = `${base}-${n}`;
 
-  CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY,
-    room_id TEXT NOT NULL REFERENCES rooms(id),
-    text TEXT,
-    photo BLOB,
-    photo_type TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS colonies (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    lat REAL,
-    lng REAL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS cats (
-    id INTEGER PRIMARY KEY,
-    colony_id INTEGER NOT NULL REFERENCES colonies(id),
-    name TEXT,
-    coat TEXT,
-    markings TEXT,
-    -- Ear-tipped or otherwise known to be neutered.
-    fixed INTEGER NOT NULL DEFAULT 0,
-    -- 'pending' (reported, not yet confirmed by the rescue), 'active', 'adopted',
-    -- 'missing' or 'rejected'
-    status TEXT NOT NULL DEFAULT 'pending',
-    -- Best reference photo, used to recognize the cat again.
-    photo_message_id INTEGER REFERENCES messages(id),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  -- Each report of a cat; its history.
-  CREATE TABLE IF NOT EXISTS sightings (
-    id INTEGER PRIMARY KEY,
-    cat_id INTEGER NOT NULL REFERENCES cats(id),
-    message_id INTEGER NOT NULL REFERENCES messages(id),
-    note TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS feedings (
-    id INTEGER PRIMARY KEY,
-    colony_id INTEGER NOT NULL REFERENCES colonies(id),
-    room_id TEXT NOT NULL REFERENCES rooms(id),
-    message_id INTEGER REFERENCES messages(id),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  -- Urgent cases. kind: 'pregnant', 'injured', 'sick', 'kittens' or 'no_feeder'.
-  CREATE TABLE IF NOT EXISTS flags (
-    id INTEGER PRIMARY KEY,
-    colony_id INTEGER NOT NULL REFERENCES colonies(id),
-    cat_id INTEGER REFERENCES cats(id),
-    kind TEXT NOT NULL,
-    note TEXT,
-    resolved_at TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  -- Agent runs paused until a person approves or rejects an action.
-  CREATE TABLE IF NOT EXISTS approvals (
-    id INTEGER PRIMARY KEY,
-    room_id TEXT NOT NULL REFERENCES rooms(id),
-    summary TEXT NOT NULL,
-    run_state TEXT NOT NULL,
-    approved INTEGER,
-    decided_at TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
-// Adds a column to databases created before that column existed.
-function addColumn(table, column, definition) {
-  const exists = db
-    .prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`)
-    .get(column);
-  if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-}
-
-// 'volunteer' or 'admin'
-addColumn('messages', 'sender', "TEXT NOT NULL DEFAULT 'volunteer'");
-// Latest message the admin has seen; newer volunteer messages are unread.
-addColumn('rooms', 'last_read_message_id', 'INTEGER NOT NULL DEFAULT 0');
-// Volunteer's name and phone; seen only by the rescue.
-addColumn('rooms', 'name', 'TEXT');
-addColumn('rooms', 'phone', 'TEXT');
-// Shared location, if the volunteer sent one.
-addColumn('messages', 'lat', 'REAL');
-addColumn('messages', 'lng', 'REAL');
-// A known cat the agent thinks a newly reported cat might be.
-addColumn('cats', 'maybe_same_as', 'INTEGER REFERENCES cats(id)');
-
-export function createRoom() {
   const id = crypto.randomUUID();
-  db.prepare('INSERT INTO rooms (id) VALUES (?)').run(id);
-  return id;
+  db.prepare('INSERT INTO rooms (id, name, slug) VALUES (?, ?, ?)').run(id, name, slug);
+  return { id, slug };
 }
 
-export function getRoom(id) {
-  return db.prepare('SELECT * FROM rooms WHERE id = ?').get(id);
+export function getRoom(slug) {
+  return db.prepare('SELECT * FROM rooms WHERE slug = ?').get(slug);
+}
+
+// Renaming keeps the slug, so the volunteer's link still works.
+export function renameRoom(id, name) {
+  db.prepare('UPDATE rooms SET name = ? WHERE id = ?').run(name, id);
 }
 
 // Each room with its latest message, most recently active first.
 export function listRooms() {
   return db
     .prepare(`
-    SELECT r.id, m.text, m.sender, m.photo_type IS NOT NULL AS has_photo,
+    SELECT r.id, r.name, r.slug, m.text, m.sender, m.photo_type IS NOT NULL AS has_photo,
            COALESCE(m.created_at, r.created_at) AS last_at,
            EXISTS (
              SELECT 1 FROM messages
@@ -221,7 +130,7 @@ export function listPendingCats() {
 export function listFeedings(colonyId) {
   return db
     .prepare(`
-    SELECT f.created_at, f.room_id, r.name FROM feedings f JOIN rooms r ON r.id = f.room_id
+    SELECT f.created_at, r.slug AS room_slug, r.name FROM feedings f JOIN rooms r ON r.id = f.room_id
     WHERE f.colony_id = ? ORDER BY f.id DESC LIMIT 10
   `)
     .all(colonyId);
@@ -266,6 +175,9 @@ export function createColony(name, description, lat, lng) {
 
 export function listPendingApprovals() {
   return db
-    .prepare('SELECT id, room_id, summary, created_at FROM approvals WHERE decided_at IS NULL')
+    .prepare(`
+      SELECT a.id, r.slug AS room_slug, r.name AS room_name, a.summary, a.created_at
+      FROM approvals a JOIN rooms r ON r.id = a.room_id WHERE a.decided_at IS NULL
+    `)
     .all();
 }

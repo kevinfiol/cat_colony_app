@@ -3,3 +3,4 @@
 - avoid code-golfy code
 - prefer simplicity and less dependencies
 - prefer small dependencies
+- prefer packages from https://www.npmjs.com/~lukeed before others

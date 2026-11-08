@@ -66,7 +66,7 @@
       {{#each approvals as approval}}
         <li>
           <p>{{ approval.summary }}</p>
-          <small><a href="/admin/chat/{{ approval.room_id }}">From this chat</a> · {{ approval.created_at }} UTC</small>
+          <small>From <a href="/admin/chat/{{ approval.room_slug }}">{{ approval.room_name }}</a> · {{ approval.created_at }} UTC</small>
           <form method="post" action="/admin/approvals/{{ approval.id }}">
             <button name="approved" value="1">Approve</button>
             <button name="approved" value="0">Reject</button>
@@ -79,6 +79,7 @@
   <h1>Chat rooms</h1>
 
   <form method="post" action="/admin/rooms">
+    <input name="name" placeholder="Name, e.g. Maria Gomez" required>
     <button>New chat room</button>
   </form>
 
@@ -89,7 +90,7 @@
     <ul>
       {{#each rooms as room}}
         <li class="{{ room.unread ? 'unread' : '' }}">
-          <a href="/admin/chat/{{ room.id }}">{{ room.id }}</a>
+          <a href="/admin/chat/{{ room.slug }}">{{ room.name || room.slug }}</a>
           <p class="preview">
             {{#if room.sender === 'admin'}}You:{{/if}}
             {{#if room.text}}

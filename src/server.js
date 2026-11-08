@@ -16,7 +16,7 @@ const page = (markup) =>
   });
 
 function requireRoom(event) {
-  const room = db.getRoom(getRouterParam(event, 'id'));
+  const room = db.getRoom(getRouterParam(event, 'slug'));
   if (!room) throw new HTTPError({ status: 404, message: 'Chat room not found' });
   return room;
 }
@@ -143,40 +143,50 @@ const app = new H3()
 
   .get('/admin/events', (event) => subscribe(event, 'admin'))
 
-  .post('/admin/rooms', () => {
-    const id = db.createRoom();
+  .post('/admin/rooms', async (event) => {
+    const name = (await event.req.formData()).get('name')?.trim();
+    if (!name) throw new HTTPError({ status: 400, message: 'A chat room needs a name' });
+    const { slug } = db.createRoom(name);
     notifyAdmins();
-    return redirect(`/admin/chat/${id}`);
+    return redirect(`/admin/chat/${slug}`);
   })
 
-  .get('/admin/chat/:id', (event) => {
+  .post('/admin/chat/:slug/name', async (event) => {
+    const room = requireRoom(event);
+    const name = (await event.req.formData()).get('name')?.trim();
+    if (name) db.renameRoom(room.id, name);
+    notifyAdmins();
+    return redirect(`/admin/chat/${room.slug}`);
+  })
+
+  .get('/admin/chat/:slug', (event) => {
     const room = requireRoom(event);
     db.markRead(room.id);
     notifyAdmins();
     return page(chatView({ room, messages: db.listMessages(room.id), isAdmin: true }));
   })
 
-  .post('/admin/chat/:id', async (event) => {
+  .post('/admin/chat/:slug', async (event) => {
     const room = requireRoom(event);
     await saveMessage(event, room, 'admin');
     db.markRead(room.id);
     notifyRoom(room.id);
-    return redirect(`/admin/chat/${room.id}`);
+    return redirect(`/admin/chat/${room.slug}`);
   })
 
-  .get('/chat/:id', (event) => {
+  .get('/chat/:slug', (event) => {
     const room = requireRoom(event);
     return page(chatView({ room, messages: db.listMessages(room.id), isAdmin: false }));
   })
 
-  .get('/chat/:id/events', (event) => subscribe(event, requireRoom(event).id))
+  .get('/chat/:slug/events', (event) => subscribe(event, requireRoom(event).id))
 
-  .post('/chat/:id', async (event) => {
+  .post('/chat/:slug', async (event) => {
     const room = requireRoom(event);
     const messageId = await saveMessage(event, room, 'volunteer');
     notifyRoom(room.id);
     if (messageId) replyInBackground(room.id, messageId);
-    return redirect(`/chat/${room.id}`);
+    return redirect(`/chat/${room.slug}`);
   })
 
   .get('/photos/:id', (event) => {

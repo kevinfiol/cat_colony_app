@@ -19,11 +19,14 @@
 <body>
   {{#if isAdmin}}
     <p><a href="/admin">← All chat rooms</a></p>
-    <h1>Chat</h1>
-    <p>Volunteer link: <a href="/chat/{{ room.id }}">/chat/{{ room.id }}</a></p>
+    <h1>{{ room.name }}</h1>
+    <form method="post" action="/admin/chat/{{ room.slug }}/name">
+      <input name="name" value="{{ room.name }}" required>
+      <button>Rename</button>
+    </form>
+    <p>Volunteer link: <a href="/chat/{{ room.slug }}">/chat/{{ room.slug }}</a></p>
   {{#else}}
-    <h1>Chat</h1>
-    <small>{{ room.id }}</small>
+    <h1>{{ room.name }}</h1>
   {{/if}}
 
   <div id="messages">
@@ -45,7 +48,7 @@
     {{/each}}
   </div>
 
-  <form method="post" enctype="multipart/form-data">
+  <form id="send" method="post" enctype="multipart/form-data">
     <textarea name="text" rows="3" placeholder="Message"></textarea>
     <input type="file" name="photo" accept="image/*">
     <input type="hidden" name="lat">
@@ -55,7 +58,7 @@
   </form>
 
   <script>
-    const form = document.querySelector('form');
+    const form = document.getElementById('send');
 
     // Send in the background instead of reloading the page.
     // The new message then shows up through the update stream below.
@@ -93,7 +96,7 @@
 
     // Re-fetch this page and swap in the new messages on each server update.
     // Only the messages are replaced, so a half-typed reply is kept.
-    new EventSource('/chat/{{ room.id }}/events').onmessage = async () => {
+    new EventSource('/chat/{{ room.slug }}/events').onmessage = async () => {
       const markup = await (await fetch(location.href)).text();
       const doc = new DOMParser().parseFromString(markup, 'text/html');
       document.getElementById('messages').replaceWith(doc.getElementById('messages'));

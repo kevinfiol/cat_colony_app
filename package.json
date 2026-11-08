@@ -8,9 +8,11 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node --env-file=.env src/server.js",
-    "dev": "node --env-file=.env --watch src/server.js",
-    "format": "oxfmt src"
+    "start": "pnpm migrate && node --env-file=.env src/server.js",
+    "dev": "pnpm migrate && node --env-file=.env --watch src/server.js",
+    "migrate": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/migrate.js",
+    "seed": "pnpm migrate && node --env-file=.env scripts/seed.js",
+    "format": "oxfmt src scripts"
   },
   "dependencies": {
     "@openai/agents": "^0.21.0",
