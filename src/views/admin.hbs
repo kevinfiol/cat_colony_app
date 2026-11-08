@@ -1,4 +1,4 @@
-{{#expect rooms, approvals, newCats, flags}}
+{{#expect rooms, approvals, newCats, flags, notifications, pendingCount}}
 <!doctype html>
 <html lang="en">
 <head>
@@ -8,20 +8,24 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <nav><a href="/admin" aria-current="page">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
+  <nav class="admin-nav" aria-label="Admin"><a href="/admin" aria-current="page">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a>{{{ notifications }}}</nav>
 
   <main id="live">
   <h1>Today</h1>
 
-  {{#if flags.length === 0 && newCats.length === 0 && approvals.length === 0}}
+  {{#if pendingCount === 0}}
     <p>✓ All caught up. Nothing urgent or waiting for you.</p>
+  {{/if}}
+
+  {{#if pendingCount > flags.length + newCats.length + approvals.length}}
+    <p><a href="/admin/cats?show=same">Review possible duplicate cats →</a></p>
   {{/if}}
 
   {{#if flags.length > 0}}
     <h2>Urgent ({{ flags.length }})</h2>
     <ul>
       {{#each flags as flag}}
-        <li class="urgent">
+        <li id="flag-{{ flag.id }}" class="urgent">
           ⚠️ <strong>{{ flag.kind }}</strong> at
           <a href="/admin/colonies/{{ flag.colony_id }}">{{ flag.colony_name }}</a>
           {{#if flag.cat_id}}· <a href="/admin/cats/{{ flag.cat_id }}">{{ flag.cat_name || flag.cat_coat }}</a>{{/if}}
@@ -75,7 +79,7 @@
     <h2>Waiting for your OK ({{ approvals.length }})</h2>
     <ul>
       {{#each approvals as approval}}
-        <li>
+        <li id="approval-{{ approval.id }}">
           <p>{{ approval.summary }}</p>
           <small>From <a href="/admin/chat/{{ approval.room_slug }}">{{ approval.room_name }}</a> · <time datetime="{{ approval.created_at }}">{{ approval.created_at }} UTC</time></small>
           <form class="inline" method="post" action="/admin/approvals/{{ approval.id }}">
@@ -140,7 +144,7 @@
       localTimes(live);
     }
 
-    new EventSource('/admin/events').onmessage = refresh;
+    adminEvents.addEventListener('message', refresh);
     document.addEventListener('focusout', () => stale && setTimeout(refresh, 300));
   </script>
 </body>

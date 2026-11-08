@@ -1,4 +1,4 @@
-{{#expect room, messages, isAdmin}}
+{{#expect room, messages, isAdmin, notifications}}
 <!doctype html>
 <html lang="en">
 <head>
@@ -23,7 +23,7 @@
 </head>
 <body>
   {{#if isAdmin}}
-    <nav><a href="/admin">← Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
+    <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a>{{{ notifications }}}</nav>
     <h1>{{ room.name }}</h1>
     <label>
       Volunteer link. Send it to {{ room.name }}; anyone with it can post as them.

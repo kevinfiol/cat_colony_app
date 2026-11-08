@@ -1,4 +1,4 @@
-{{#expect cat, history, colonies, others}}
+{{#expect cat, history, colonies, others, notifications}}
 {{#var back = '/admin/cats/' + cat.id}}
 <!doctype html>
 <html lang="en">
@@ -14,7 +14,7 @@
   </style>
 </head>
 <body>
-  <nav><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
+  <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats" aria-current="page">Cats</a>{{{ notifications }}}</nav>
   <p><a href="/admin/colonies/{{ cat.colony_id }}">← {{ cat.colony_name }}</a></p>
   <h1>{{ cat.name || cat.coat }}</h1>
   {{#if cat.photo_message_id}}<img class="photo" src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}">{{/if}}

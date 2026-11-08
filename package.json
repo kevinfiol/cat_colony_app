@@ -12,6 +12,7 @@
     "dev": "pnpm migrate && node --env-file=.env --watch src/server.js",
     "migrate": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/migrate.js",
     "seed": "pnpm migrate && node --env-file=.env scripts/seed.js",
+    "test": "node --test",
     "format": "oxfmt src scripts"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-{{#expect cats, show, colonyFlags, totals, colonies}}
+{{#expect cats, show, colonyFlags, totals, colonies, notifications}}
 {{#var back = '/admin/cats' + (show ? '?show=' + show : '')}}
 <!doctype html>
 <html lang="en">
@@ -12,7 +12,7 @@
   </style>
 </head>
 <body>
-  <nav><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats" aria-current="page">Cats</a></nav>
+  <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats" aria-current="page">Cats</a>{{{ notifications }}}</nav>
   <h1>Cats</h1>
 
   <div class="stats">
@@ -56,7 +56,7 @@
   {{#else}}
     <ul>
       {{#each cats as cat}}
-        <li class="cat {{ cat.open_flags ? 'urgent' : cat.status === 'pending' ? 'new' : '' }}">
+        <li id="cat-{{ cat.id }}" class="cat {{ cat.open_flags ? 'urgent' : cat.status === 'pending' ? 'new' : '' }}">
           {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}" loading="lazy">{{/if}}
           <div>
             <p>
@@ -70,11 +70,11 @@
               Seen {{ cat.sightings === 1 ? 'once' : cat.sightings + ' times' }}
               {{#if cat.last_seen_at}}· last <time datetime="{{ cat.last_seen_at }}">{{ cat.last_seen_at }} UTC</time>{{/if}}
             </small>
-            {{#if cat.same_coat}}
+            {{#if cat.same_id}}
               <div class="same">
                 <p class="cat">
                   Same cat as
-                  <a href="/admin/cats/{{ cat.maybe_same_as }}"><strong>{{ cat.same_name || cat.same_coat }}</strong></a>?
+                  <a href="/admin/cats/{{ cat.maybe_same_as }}"><strong>{{ cat.same_name || cat.same_coat || 'Cat #' + cat.same_id }}</strong></a>?
                   {{#if cat.same_photo_message_id}}<img src="/photos/{{ cat.same_photo_message_id }}" alt="{{ cat.same_coat }}" loading="lazy">{{/if}}
                 </p>
                 <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">

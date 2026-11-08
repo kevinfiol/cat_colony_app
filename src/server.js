@@ -11,12 +11,20 @@ const coloniesView = view('colonies');
 const colonyView = view('colony');
 const catsView = view('cats');
 const catView = view('cat');
+const notificationsView = view('notifications');
 
 const page = (markup, status = 200) =>
   new Response(markup, {
     status,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
+
+function adminPage(render, data) {
+  const items = db.listAdminNotifications();
+  return page(
+    render({ ...data, pendingCount: items.length, notifications: notificationsView({ items }) }),
+  );
+}
 
 // Shared styles and scripts, read once at startup.
 const asset = (name, type) => {
@@ -120,15 +128,19 @@ const app = new H3({ onError: errorPage })
   .get('/', () => redirect('/admin'))
 
   .get('/admin', () =>
-    page(
-      adminView({
-        rooms: db.listRooms(),
-        approvals: db.listPendingApprovals(),
-        newCats: db.listPendingCats(),
-        flags: db.listOpenFlags(),
-      }),
-    ),
+    adminPage(adminView, {
+      rooms: db.listRooms(),
+      approvals: db.listPendingApprovals(),
+      newCats: db.listPendingCats(),
+      flags: db.listOpenFlags(),
+    }),
   )
+
+  .get('/admin/notifications', () => {
+    const response = page(notificationsView({ items: db.listAdminNotifications() }));
+    response.headers.set('Cache-Control', 'no-store');
+    return response;
+  })
 
   .post('/admin/flags/:id', async (event) => {
     const form = await event.req.formData();
@@ -184,30 +196,32 @@ const app = new H3({ onError: errorPage })
       urgent: (cat) => cat.open_flags,
       tnr: (cat) => !cat.fixed && ['active', 'pending'].includes(cat.status),
       new: (cat) => cat.status === 'pending',
-      same: (cat) => cat.same_coat,
+      same: (cat) => cat.same_id,
     };
     const cats = db.listAllCats().filter(filters[show] ?? (() => true));
     // Urgent cases about a whole colony, e.g. kittens or a lost feeder; cat ones show on the cat.
     const colonyFlags = db.listOpenFlags().filter((flag) => !flag.cat_id);
-    return page(
-      catsView({ cats, show, colonyFlags, totals: db.catTotals(), colonies: db.listColonies() }),
-    );
+    return adminPage(catsView, {
+      cats,
+      show,
+      colonyFlags,
+      totals: db.catTotals(),
+      colonies: db.listColonies(),
+    });
   })
 
   .get('/admin/cats/:id', (event) => {
     const cat = db.getCat(getRouterParam(event, 'id'));
     if (!cat) throw new HTTPError({ status: 404, message: 'Cat not found' });
-    return page(
-      catView({
-        cat,
-        history: db.listCatHistory(cat.id),
-        colonies: db.listColonies(),
-        others: db.listColonyCats(cat.colony_id).filter((other) => other.id !== cat.id),
-      }),
-    );
+    return adminPage(catView, {
+      cat,
+      history: db.listCatHistory(cat.id),
+      colonies: db.listColonies(),
+      others: db.listColonyCats(cat.colony_id).filter((other) => other.id !== cat.id),
+    });
   })
 
-  .get('/admin/colonies', () => page(coloniesView({ colonies: db.listColonies() })))
+  .get('/admin/colonies', () => adminPage(coloniesView, { colonies: db.listColonies() }))
 
   .post('/admin/colonies', async (event) => {
     const form = await event.req.formData();
@@ -225,15 +239,13 @@ const app = new H3({ onError: errorPage })
   .get('/admin/colonies/:id', (event) => {
     const colony = db.getColony(getRouterParam(event, 'id'));
     if (!colony) throw new HTTPError({ status: 404, message: 'Colony not found' });
-    return page(
-      colonyView({
-        colony,
-        cats: db.listColonyCats(colony.id),
-        flags: db.listOpenFlags(colony.id),
-        handled: db.listHandledFlags(colony.id),
-        feedings: db.listFeedings(colony.id),
-      }),
-    );
+    return adminPage(colonyView, {
+      colony,
+      cats: db.listColonyCats(colony.id),
+      flags: db.listOpenFlags(colony.id),
+      handled: db.listHandledFlags(colony.id),
+      feedings: db.listFeedings(colony.id),
+    });
   })
 
   .get('/admin/events', (event) => subscribe(event, 'admin'))
@@ -258,7 +270,7 @@ const app = new H3({ onError: errorPage })
     const room = requireRoom(event);
     db.markRead(room.id);
     notifyAdmins();
-    return page(chatView({ room, messages: db.listMessages(room.id), isAdmin: true }));
+    return adminPage(chatView, { room, messages: db.listMessages(room.id), isAdmin: true });
   })
 
   .post('/admin/chat/:slug', async (event) => {

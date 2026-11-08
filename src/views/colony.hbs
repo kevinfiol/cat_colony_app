@@ -1,4 +1,4 @@
-{{#expect colony, cats, flags, handled, feedings}}
+{{#expect colony, cats, flags, handled, feedings, notifications}}
 {{#var back = '/admin/colonies/' + colony.id}}
 {{#var lastFed = feedings[0]}}
 <!doctype html>
@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <nav><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
+  <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies" aria-current="page">Colonies</a><a href="/admin/cats">Cats</a>{{{ notifications }}}</nav>
   <p><a href="/admin/colonies">← All colonies</a></p>
   <h1>{{ colony.name }}</h1>
   {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}

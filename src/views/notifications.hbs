@@ -1,0 +1,39 @@
+{{#expect items}}
+<details id="notifications" class="notifications">
+  <summary class="notification-bell" aria-label="Notifications, {{ items.length }} pending {{ items.length === 1 ? 'action' : 'actions' }}" aria-controls="notifications-panel">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+      <path d="M10 21h4"></path>
+    </svg>
+    <span class="badge notification-count" aria-hidden="true" {{ items.length === 0 ? 'hidden' : '' }}>{{ items.length > 99 ? '99+' : items.length }}</span>
+  </summary>
+  <div id="notifications-panel" class="notifications-panel">
+    <header class="notifications-header">
+      <h2>Notifications</h2>
+      <p class="hint">{{ items.length }} pending {{ items.length === 1 ? 'action' : 'actions' }}</p>
+    </header>
+    <p id="notifications-error" class="notifications-error" role="status" hidden>Couldn’t refresh. Reconnecting… <a href="/admin">Check Today</a></p>
+    <div id="notifications-content" class="notifications-content">
+      {{#if items.length === 0}}
+        <div class="notifications-empty">
+          <strong>All caught up</strong>
+          <p>No pending approvals or urgent cases.</p>
+        </div>
+      {{#else}}
+        <ul class="notification-list">
+          {{#each items as item}}
+            <li>
+              <a id="notification-{{ item.id }}" class="notification-item {{ item.urgent ? 'notification-urgent' : '' }}" href="{{ item.href }}" aria-label="{{ item.kind }}: {{ item.title }}. {{ item.detail }}">
+                <span class="notification-kind">{{ item.kind }}</span>
+                <strong>{{ item.title }}</strong>
+                <span class="notification-detail">{{ item.detail }}</span>
+                <small><time datetime="{{ item.created_at }}">{{ item.created_at }} UTC</time></small>
+              </a>
+            </li>
+          {{/each}}
+        </ul>
+      {{/if}}
+    </div>
+    <footer class="notifications-footer"><a href="/admin">Go to Today →</a></footer>
+  </div>
+</details>

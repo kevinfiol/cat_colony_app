@@ -107,3 +107,124 @@ form.inline input:not([type='hidden']) {
 summary {
   cursor: pointer;
 }
+
+.admin-nav {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 0.25rem;
+}
+.notifications {
+  margin-left: auto;
+}
+.notification-bell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  background: white;
+  color: #333;
+  list-style: none;
+}
+.notification-bell::-webkit-details-marker {
+  display: none;
+}
+.notification-bell:hover,
+.notifications[open] .notification-bell {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.notification-count {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.35rem;
+  border: 2px solid white;
+}
+.notifications-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 1100; /* Above the colony map's controls. */
+  width: min(24rem, 100%);
+  box-sizing: border-box;
+  border: 1px solid #ddd;
+  border-radius: 0.75rem;
+  background: white;
+  box-shadow: 0 0.75rem 2rem #0002;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.notifications-header,
+.notifications-footer,
+.notifications-empty,
+.notifications-error {
+  padding: 0.75rem 1rem;
+}
+.notifications-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.notifications-header,
+.notifications-footer {
+  background: #f8fafc;
+}
+.notifications-content {
+  max-height: min(28rem, 55dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.notification-list {
+  margin: 0;
+}
+.notification-list li {
+  padding: 0;
+}
+.notification-list li:last-child {
+  border-bottom: 0;
+}
+.notification-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 1rem;
+  color: #222;
+  text-decoration: none;
+}
+.admin-nav .notification-item,
+.notifications-footer a,
+.notifications-error a {
+  margin: 0;
+}
+.notification-item:hover,
+.notification-item:focus-visible {
+  background: #f1f5f9;
+}
+.notification-item:focus-visible {
+  outline-offset: -3px;
+}
+.notification-kind {
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.notification-urgent {
+  border-left: 3px solid #b91c1c;
+  background: #fff7f7;
+}
+.notification-urgent .notification-kind,
+.notifications-error {
+  color: #991b1b;
+}
+.notification-detail,
+.notifications-empty p {
+  color: #555;
+  font-size: 0.9rem;
+}
+li:target {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+  scroll-margin-top: 1rem;
+}

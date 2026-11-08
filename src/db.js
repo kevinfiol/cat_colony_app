@@ -174,13 +174,13 @@ export function resolveFlag(id, note) {
 export function listAllCats() {
   return db
     .prepare(`
-    SELECT c.*, col.name AS colony_name, same.name AS same_name, same.coat AS same_coat,
+    SELECT c.*, col.name AS colony_name, same.id AS same_id, same.name AS same_name, same.coat AS same_coat,
            same.photo_message_id AS same_photo_message_id,
            (SELECT COUNT(*) FROM sightings WHERE cat_id = c.id) AS sightings,
            (SELECT MAX(created_at) FROM sightings WHERE cat_id = c.id) AS last_seen_at,
            (SELECT group_concat(kind, ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
     FROM cats c JOIN colonies col ON col.id = c.colony_id
-    LEFT JOIN cats same ON same.id = c.maybe_same_as AND same.status != 'rejected'
+    LEFT JOIN cats same ON same.id = c.maybe_same_as AND same.id != c.id AND same.status != 'rejected'
     WHERE c.status != 'rejected'
     ORDER BY open_flags IS NULL, same.id IS NULL, c.status = 'pending' DESC, c.id DESC
   `)
@@ -301,4 +301,55 @@ export function listPendingApprovals() {
       FROM approvals a JOIN rooms r ON r.id = a.room_id WHERE a.decided_at IS NULL
     `)
     .all();
+}
+
+// Pending work, not unread messages: opening the bell never clears an action.
+// The review query loads fresh records even when linking back to the current page.
+export function listAdminNotifications() {
+  const flagNames = {
+    pregnant: 'Pregnant cat',
+    injured: 'Injured cat',
+    sick: 'Sick cat',
+    kittens: 'New kittens',
+    no_feeder: 'Colony without a feeder',
+  };
+  const urgent = listOpenFlags().map((flag) => ({
+    id: `flag-${flag.id}`,
+    href: `/admin?review=flag-${flag.id}#flag-${flag.id}`,
+    kind: 'Urgent',
+    urgent: true,
+    title: flagNames[flag.kind] || flag.kind,
+    detail: [flag.cat_name || flag.cat_coat, flag.colony_name, flag.note]
+      .filter(Boolean)
+      .join(' · '),
+    created_at: flag.created_at,
+  }));
+  const approvals = listPendingApprovals().map((approval) => ({
+    id: `approval-${approval.id}`,
+    href: `/admin?review=approval-${approval.id}#approval-${approval.id}`,
+    kind: 'Approval needed',
+    title: approval.summary,
+    detail: `Reported by ${approval.room_name || 'a volunteer'}`,
+    created_at: approval.created_at,
+  }));
+  // A new cat with a possible match is one review, not two notifications.
+  const cats = listAllCats()
+    .filter((cat) => cat.status === 'pending' || cat.same_id)
+    .map((cat) => ({
+      id: `cat-${cat.id}`,
+      href: cat.same_id
+        ? `/admin/cats?show=same&review=cat-${cat.id}#cat-${cat.id}`
+        : `/admin/cats/${cat.id}`,
+      kind: cat.same_id ? 'Possible duplicate' : 'New cat to confirm',
+      title: cat.name || cat.coat || `Cat #${cat.id}`,
+      detail: cat.same_id
+        ? `${cat.colony_name} · Compare with ${cat.same_name || cat.same_coat || `cat #${cat.same_id}`}`
+        : cat.colony_name,
+      created_at: cat.created_at,
+    }));
+  return [...urgent, ...approvals, ...cats].sort(
+    (a, b) =>
+      Number(Boolean(b.urgent)) - Number(Boolean(a.urgent)) ||
+      b.created_at.localeCompare(a.created_at),
+  );
 }
