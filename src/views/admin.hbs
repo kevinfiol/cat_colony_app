@@ -1,0 +1,62 @@
+{{#expect rooms}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin · Chat rooms</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    ul { list-style: none; padding: 0; }
+    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
+    .preview { color: #555; margin: 0.25rem 0; }
+    small { color: #888; }
+    li.unread { animation: blink 1.5s ease-in-out infinite alternate; }
+    @keyframes blink { from { background: transparent; } to { background: #fde2e2; } }
+    @media (prefers-reduced-motion: reduce) {
+      li.unread { animation: none; background: #fde2e2; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Chat rooms</h1>
+
+  <form method="post" action="/admin/rooms">
+    <button>New chat room</button>
+  </form>
+
+  <div id="rooms">
+  {{#if rooms.length === 0}}
+    <p>No chat rooms yet.</p>
+  {{#else}}
+    <ul>
+      {{#each rooms as room}}
+        <li class="{{ room.unread ? 'unread' : '' }}">
+          <a href="/admin/chat/{{ room.id }}">{{ room.id }}</a>
+          <p class="preview">
+            {{#if room.sender === 'admin'}}You:{{/if}}
+            {{#if room.text}}
+              {{ room.text }}
+            {{#elif room.has_photo}}
+              📷 Photo
+            {{#else}}
+              <em>No messages yet</em>
+            {{/if}}
+          </p>
+          <small>{{ room.last_at }} UTC</small>
+        </li>
+      {{/each}}
+    </ul>
+  {{/if}}
+  </div>
+
+  <script>
+    // Re-fetch this page and swap in the new room list on each server update.
+    new EventSource('/admin/events').onmessage = async () => {
+      const markup = await (await fetch('/admin')).text();
+      const doc = new DOMParser().parseFromString(markup, 'text/html');
+      document.getElementById('rooms').replaceWith(doc.getElementById('rooms'));
+    };
+  </script>
+</body>
+</html>

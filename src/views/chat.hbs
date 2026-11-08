@@ -1,0 +1,79 @@
+{{#expect room, messages, isAdmin}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    .message { background: #f1f1f1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
+    .message img { max-width: 100%; border-radius: 0.25rem; }
+    .message p { margin: 0.25rem 0; }
+    .message.mine { background: #dbeafe; margin-left: 3rem; }
+    .message:not(.mine) { margin-right: 3rem; }
+    small { color: #888; }
+    form { display: grid; gap: 0.5rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  {{#if isAdmin}}
+    <p><a href="/admin">← All chat rooms</a></p>
+    <h1>Chat</h1>
+    <p>Volunteer link: <a href="/chat/{{ room.id }}">/chat/{{ room.id }}</a></p>
+  {{#else}}
+    <h1>Chat</h1>
+    <small>{{ room.id }}</small>
+  {{/if}}
+
+  <div id="messages">
+    {{#each messages as message}}
+      {{#var fromAdmin = message.sender === 'admin'}}
+      <div class="message {{ fromAdmin === isAdmin ? 'mine' : '' }}">
+        <small>{{ fromAdmin ? 'Rescue' : 'Volunteer' }}</small>
+        {{#if message.has_photo}}
+          <img src="/photos/{{ message.id }}" alt="Uploaded photo">
+        {{/if}}
+        {{#if message.text}}
+          <p>{{ message.text }}</p>
+        {{/if}}
+        <small>{{ message.created_at }} UTC</small>
+      </div>
+    {{/each}}
+  </div>
+
+  <form method="post" enctype="multipart/form-data">
+    <textarea name="text" rows="3" placeholder="Message"></textarea>
+    <input type="file" name="photo" accept="image/*">
+    <button>Send</button>
+  </form>
+
+  <script>
+    const form = document.querySelector('form');
+
+    // Send in the background instead of reloading the page.
+    // The new message then shows up through the update stream below.
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await fetch(form.action, { method: 'POST', body: new FormData(form) });
+      form.reset();
+    });
+
+    // Enter sends the message; Shift+Enter adds a new line.
+    form.text.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        event.target.form.requestSubmit();
+      }
+    });
+
+    // Re-fetch this page and swap in the new messages on each server update.
+    // Only the messages are replaced, so a half-typed reply is kept.
+    new EventSource('/chat/{{ room.id }}/events').onmessage = async () => {
+      const markup = await (await fetch(location.href)).text();
+      const doc = new DOMParser().parseFromString(markup, 'text/html');
+      document.getElementById('messages').replaceWith(doc.getElementById('messages'));
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+- prefer readability
+- prefer less code, but not if it hampers readability
+- avoid code-golfy code
+- prefer simplicity and less dependencies
+- prefer small dependencies
