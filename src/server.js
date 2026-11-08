@@ -3,6 +3,7 @@ import { H3, HTTPError, EventStream, serve, redirect, getRouterParam, getQuery }
 import { compile } from 'tempura';
 import * as db from './db.js';
 import { respond, decide, applyHandledNote } from './agent.js';
+import { readColonyLocation, searchAddresses } from './locations.js';
 
 const view = (name) => compile(readFileSync(`src/views/${name}.hbs`, 'utf8'));
 const adminView = view('admin');
@@ -125,6 +126,7 @@ function notifyRoom(roomId) {
 const app = new H3({ onError: errorPage })
   .get('/app.css', asset('app.css', 'text/css; charset=utf-8'))
   .get('/app.js', asset('app.js', 'text/javascript; charset=utf-8'))
+  .get('/colonies.js', asset('colonies.js', 'text/javascript; charset=utf-8'))
   .get('/', () => redirect('/admin'))
 
   .get('/admin', () =>
@@ -223,16 +225,31 @@ const app = new H3({ onError: errorPage })
 
   .get('/admin/colonies', () => adminPage(coloniesView, { colonies: db.listColonies() }))
 
+  .get('/admin/addresses', async (event) => {
+    const headers = { 'Cache-Control': 'no-store' };
+    try {
+      return Response.json({ results: await searchAddresses(getQuery(event).q) }, { headers });
+    } catch {
+      return Response.json(
+        { error: 'Address search is unavailable. Drop a pin or enter coordinates instead.' },
+        { status: 503, headers },
+      );
+    }
+  })
+
   .post('/admin/colonies', async (event) => {
     const form = await event.req.formData();
     const name = form.get('name')?.trim();
-    const lat = number(form, 'lat');
-    const lng = number(form, 'lng');
-    if (!name || lat == null || lng == null) {
-      throw new HTTPError({ status: 400, message: 'A colony needs a name and a spot on the map' });
+    if (!name) throw new HTTPError({ status: 400, message: 'A colony needs a name.' });
+    let location;
+    try {
+      location = readColonyLocation(form);
+    } catch (error) {
+      throw new HTTPError({ status: 400, message: error.message });
     }
     const description = form.get('description')?.trim() || null;
-    db.createColony(name, description, form.get('address')?.trim() || null, lat, lng);
+    db.createColony(name, description, location.address, location.lat, location.lng);
+    notifyAdmins();
     return redirect('/admin/colonies');
   })
 

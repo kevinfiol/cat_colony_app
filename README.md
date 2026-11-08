@@ -1,3 +1,9 @@
+## Colony locations
+
+Colony creation starts with a Florida address search. Choosing a suggestion fills its latitude and longitude and places the map pin. Alternatively, choose “Map pin / coordinates” to drop or drag a pin or enter coordinates directly. Changing the pin or coordinates clears the address so the saved label cannot describe a different spot.
+
+Address autocomplete uses [Photon](https://github.com/komoot/photon#demo-server). Requests are limited to the US and Florida's bounding box; returned suggestions must also identify their state as Florida. Up to ten suggestions are shown. OpenStreetMap coverage is incomplete, so some addresses may be missing; adding a city or ZIP code can help. The public endpoint supports modest use and can be throttled or unavailable; coordinate entry works independently. Set `GEOCODER_URL` to use another Photon-compatible endpoint. Searches send the typed address to the provider, not existing colony pins. Suggestions use OpenStreetMap data.
+
 challenge:
 ```md
 be brief and concise from now on. read this challenge:

@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ room.name }} · Cat line</title>
+  <title>{{ room.name }} · Cathy (AI Assistant)</title>
   <link rel="stylesheet" href="/app.css">
   <style>
     body { margin-bottom: 0; }
@@ -41,7 +41,7 @@
     </details>
   {{#else}}
     <h1>Hi {{ room.name }} 🐈</h1>
-    <p class="hint">Send a photo, your location or a quick note about the cats you saw or fed. The cat line logs it for the rescue.</p>
+    <p class="hint">Send a photo, your location or a quick note about the cats you saw or fed. Cathy (AI Assistant) logs it for the rescue.</p>
   {{/if}}
 
   <div id="messages" aria-live="polite">
@@ -51,7 +51,7 @@
     {{#each messages as message}}
       {{#var fromRescue = message.sender !== 'volunteer'}}
       <div class="message {{ fromRescue === isAdmin ? 'mine' : '' }}">
-        <small>{{ message.sender === 'bot' ? 'Cat line' : fromRescue ? 'Rescue' : room.name }}</small>
+        <small>{{ message.sender === 'bot' ? 'Cathy (AI Assistant)' : fromRescue ? 'Rescue' : room.name }}</small>
         {{#if message.has_photo}}
           <a href="/photos/{{ message.id }}" target="_blank"><img src="/photos/{{ message.id }}" alt="Photo sent in the chat" loading="lazy"></a>
         {{/if}}
@@ -69,7 +69,7 @@
       </div>
     {{/each}}
     {{#if messages.length > 0 && messages[messages.length - 1].sender === 'volunteer'}}
-      <p class="typing">Cat line is reading…</p>
+      <p class="typing">Cathy (AI Assistant) is reading…</p>
     {{/if}}
   </div>
 
@@ -79,7 +79,7 @@
     <input type="hidden" name="lng">
     <div class="actions">
       <label>📷 <input type="file" name="photo" accept="image/*" aria-label="Photo"></label>
-      <button type="button" id="locate">📍 Add my location</button>
+      {{#if !isAdmin}}<button type="button" id="locate">📍 Add my location</button>{{/if}}
       <button type="submit">Send</button>
     </div>
     <small id="status" role="status"></small>
@@ -99,7 +99,7 @@
     function clearLocation() {
       // reset() leaves hidden inputs alone, so clear the location by hand.
       form.lat.value = form.lng.value = '';
-      locate.textContent = '📍 Add my location';
+      if (locate) locate.textContent = '📍 Add my location';
     }
 
     // Send in the background instead of reloading the page.
@@ -107,7 +107,9 @@
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!form.text.value.trim() && !form.photo.files.length && !form.lat.value) {
-        status.textContent = 'Write a message, add a photo or add your location first.';
+        status.textContent = locate
+          ? 'Write a message, add a photo or add your location first.'
+          : 'Write a message or add a photo first.';
         return form.text.focus();
       }
       send.disabled = true;
@@ -129,7 +131,7 @@
 
     // Attaches the phone's current location to the next message. Clicking again removes it.
     // Browsers only allow this over HTTPS or on localhost.
-    locate.addEventListener('click', () => {
+    locate?.addEventListener('click', () => {
       if (form.lat.value) return clearLocation();
       if (!navigator.geolocation) {
         status.textContent = 'This browser can’t share your location.';

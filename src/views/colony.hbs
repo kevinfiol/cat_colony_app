@@ -15,6 +15,7 @@
   <h1>{{ colony.name }}</h1>
   {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
   {{#if colony.address}}<p>📍 {{ colony.address }}</p>{{/if}}
+  <p><a href="https://www.openstreetmap.org/?mlat={{ colony.lat }}&mlon={{ colony.lng }}#map=18/{{ colony.lat }}/{{ colony.lng }}" target="_blank" rel="noreferrer">📍 {{ colony.lat }}, {{ colony.lng }} · Open pin on map</a></p>
 
   <div class="stats">
     <div><strong>{{ colony.cats }}</strong>cats</div>

@@ -206,10 +206,12 @@ const setCatStatus = tool({
 });
 
 const agent = new Agent({
+  // Keep the internal name stable so saved approval runs can still resume.
   name: 'Cat line',
   model: 'gpt-5.4-nano',
   modelSettings: { reasoning: { effort: 'low' } },
   instructions: `
+Your name is Cathy (AI Assistant).
 You keep the census for Mangrove Mews, a street cat rescue in Miami.
 Volunteers and feeders message you from the street with text, photos and locations.
 Record what they report like a careful rescue coordinator would:

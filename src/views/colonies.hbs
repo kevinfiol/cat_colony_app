@@ -11,26 +11,60 @@
     #map { height: 24rem; border-radius: 0.5rem; }
     #add form { display: grid; gap: 0.5rem; margin: 0.5rem 0 1rem; }
     #hint.missing { color: #b91c1c; font-weight: bold; }
+    #add label { display: grid; gap: 0.25rem; }
+    #add input { min-width: 0; box-sizing: border-box; width: 100%; }
+    .coordinates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+    .address-search { border: 1px solid #ddd; border-radius: 0.5rem; padding: 0.75rem; }
+    .address-search:not([hidden]) { display: grid; gap: 0.5rem; }
+    .location-modes { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    #add .location-modes label { display: flex; align-items: center; gap: 0.35rem; min-height: 2.5rem; }
+    #add .location-modes input { width: auto; min-height: auto; }
+    .address-lookup { position: relative; }
+    .address-suggestions { position: absolute; z-index: 1100; top: 100%; left: 0; right: 0; max-height: 15rem; overflow-y: auto; margin: 0; border: 1px solid #aaa; border-radius: 0.35rem; background: white; box-shadow: 0 0.4rem 1rem #0002; }
+    .address-suggestions li { padding: 0.6rem 0.75rem; cursor: pointer; overflow-wrap: anywhere; }
+    .address-suggestions li:hover, .address-suggestions li[aria-selected="true"] { background: #e6f0ff; }
   </style>
 </head>
 <body>
   <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies" aria-current="page">Colonies</a><a href="/admin/cats">Cats</a>{{{ notifications }}}</nav>
   <h1>Colonies</h1>
 
-  <div id="map"></div>
-
   <details id="add">
     <summary>Add a colony</summary>
     <form method="post">
-      <small id="hint" role="status">Click the map to place the new colony.</small>
       <input name="name" aria-label="Name" placeholder="Name, e.g. Laundromat" required>
       <input name="description" aria-label="Where it is" placeholder="Where it is, e.g. behind the laundromat">
-      <input name="address" aria-label="Address" placeholder="Address, e.g. 701 NW 7th St, Miami, FL">
-      <input type="hidden" name="lat">
-      <input type="hidden" name="lng">
+      <fieldset class="location-modes">
+        <legend>Location</legend>
+        <label><input type="radio" name="location_mode" value="address" checked>Address</label>
+        <label><input type="radio" name="location_mode" value="pin">Map pin / coordinates</label>
+      </fieldset>
+      <div id="address-fields" class="address-search">
+        <div class="address-lookup">
+          <label>Florida address
+            <input type="search" id="address-search" name="address_search" role="combobox" aria-autocomplete="list" aria-controls="address-suggestions" aria-expanded="false" autocomplete="off" maxlength="200" aria-describedby="address-hint" placeholder="Street address, city or ZIP code" required>
+          </label>
+          <ul id="address-suggestions" class="address-suggestions" role="listbox" aria-label="Address suggestions" hidden></ul>
+        </div>
+        <small id="address-hint" role="status">Choose a Florida suggestion to fill the coordinates and place the pin. Add the city or ZIP code to narrow the search.</small>
+        <small>Search by <a href="https://github.com/komoot/photon" target="_blank" rel="noreferrer">Photon</a> / <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>.</small>
+      </div>
+      <div id="coordinate-fields" hidden>
+        <div class="coordinates">
+          <label>Latitude<input type="number" name="lat" min="-90" max="90" step="any" placeholder="25.761700" required readonly></label>
+          <label>Longitude<input type="number" name="lng" min="-180" max="180" step="any" placeholder="-80.191800" required readonly></label>
+        </div>
+        <small>Drop or drag a pin on the map, or enter coordinates. Moving the pin clears any previously selected address.</small>
+      </div>
+      <small id="hint" role="status">Search for a Florida address, or choose map pin / coordinates.</small>
+      <input type="hidden" name="address">
+      <input type="hidden" name="address_lat">
+      <input type="hidden" name="address_lng">
       <button>Add colony</button>
     </form>
   </details>
+
+  <div id="map" aria-label="Colony locations"></div>
 
   {{#if colonies.length === 0}}
     <p>No colonies yet. Add the first one above.</p>
@@ -42,6 +76,7 @@
         {{#if colony.urgent}}<span class="badge">⚠️ {{ colony.urgent }} urgent</span>{{/if}}
         {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
         {{#if colony.address}}<p>📍 {{ colony.address }}</p>{{/if}}
+        <p><small>📍 {{ colony.lat }}, {{ colony.lng }}</small></p>
         <small>
           {{ colony.cats }} cats · {{ colony.fixed }} fixed · {{ colony.cats - colony.fixed }} need TNR
           {{#if colony.new_cats}} · {{ colony.new_cats }} new{{/if}}
@@ -53,45 +88,6 @@
 
   <script src="/app.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([25.7617, -80.1918], 12); // Miami
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
-
-    // Each colony's marker opens its page.
-    const markers = [];
-    for (const li of document.querySelectorAll('li[data-lat]')) {
-      const marker = L.marker([li.dataset.lat, li.dataset.lng]).addTo(map).bindTooltip(li.dataset.name);
-      marker.on('click', () => (location.href = `/admin/colonies/${li.dataset.id}`));
-      markers.push(marker);
-    }
-    if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds(), { padding: [30, 30], maxZoom: 15 });
-
-    // Clicking the map picks the new colony's spot and opens the form.
-    const add = document.getElementById('add');
-    const form = add.querySelector('form');
-    const hint = document.getElementById('hint');
-    let pick;
-    map.on('click', ({ latlng }) => {
-      pick?.remove();
-      pick = L.circleMarker(latlng, { color: '#d33' }).addTo(map);
-      form.lat.value = latlng.lat;
-      form.lng.value = latlng.lng;
-      hint.textContent = 'Spot picked. Name it and add it, or click the map again to move it.';
-      hint.classList.remove('missing');
-      add.open = true;
-      form.name.focus();
-    });
-
-    form.addEventListener('submit', (event) => {
-      if (form.lat.value) return;
-      event.preventDefault();
-      hint.textContent = 'Click the map to place the colony first.';
-      hint.classList.add('missing');
-      document.getElementById('map').scrollIntoView({ behavior: 'smooth' });
-    });
-  </script>
+  <script src="/colonies.js"></script>
 </body>
 </html>
