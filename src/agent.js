@@ -1,6 +1,6 @@
 import { Agent, run, tool, RunState, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { db, addMessage, getPhoto } from './db.js';
+import { db, addMessage, getPhoto, mergeCats as merge, setCatStatus as setStatus } from './db.js';
 
 // Traces would send colony locations and feeder details to OpenAI's dashboard.
 setTracingDisabled(true);
@@ -39,14 +39,15 @@ const listColonies = tool({
 
 const listColonyCats = tool({
   name: 'list_colony_cats',
-  description: 'List the active cats in a colony, with their open urgent flags.',
+  description:
+    "List a colony's cats with their open urgent flags. Status 'pending' means reported but not yet confirmed by the rescue; it is still a known cat.",
   parameters: z.object({ colony_id: z.number() }),
   execute: ({ colony_id }) =>
     db
       .prepare(`
-      SELECT c.id, c.name, c.coat, c.markings, c.fixed, c.photo_message_id IS NOT NULL AS has_photo,
+      SELECT c.id, c.status, c.name, c.coat, c.markings, c.fixed, c.photo_message_id IS NOT NULL AS has_photo,
              (SELECT group_concat(kind) FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
-      FROM cats c WHERE c.colony_id = ? AND c.status = 'active'
+      FROM cats c WHERE c.colony_id = ? AND c.status IN ('active', 'pending')
     `)
       .all(colony_id),
 });
@@ -64,7 +65,8 @@ const showCatPhoto = tool({
 
 const createCat = tool({
   name: 'create_cat',
-  description: 'Record a cat not yet in the colony. Also logs this message as its first sighting.',
+  description:
+    'Report a cat not yet in the colony; the rescue confirms it. Also logs this message as its first sighting.',
   parameters: z.object({
     colony_id: z.number(),
     name: z.string().nullable(),
@@ -72,14 +74,27 @@ const createCat = tool({
     markings: z.string().describe('Anything that tells this cat apart'),
     fixed: z.boolean().describe('True if ear-tipped or reported neutered'),
     note: z.string().describe('What was reported this time'),
+    maybe_same_as: z
+      .number()
+      .nullable()
+      .describe('A known cat this might be, if you are not sure it is new'),
   }),
-  execute: ({ colony_id, name, coat, markings, fixed, note }, runContext) => {
+  execute: ({ colony_id, name, coat, markings, fixed, note, maybe_same_as }, runContext) => {
     const { messageId, hasPhoto } = current(runContext);
     const { lastInsertRowid } = db
-      .prepare(
-        'INSERT INTO cats (colony_id, name, coat, markings, fixed, photo_message_id) VALUES (?, ?, ?, ?, ?, ?)',
-      )
-      .run(colony_id, name, coat, markings, fixed ? 1 : 0, hasPhoto ? messageId : null);
+      .prepare(`
+        INSERT INTO cats (colony_id, name, coat, markings, fixed, photo_message_id, maybe_same_as, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+      `)
+      .run(
+        colony_id,
+        name,
+        coat,
+        markings,
+        fixed ? 1 : 0,
+        hasPhoto ? messageId : null,
+        maybe_same_as,
+      );
     const catId = Number(lastInsertRowid);
     db.prepare('INSERT INTO sightings (cat_id, message_id, note) VALUES (?, ?, ?)').run(
       catId,
@@ -167,13 +182,7 @@ const mergeCats = tool({
   parameters: z.object({ keep_cat_id: z.number(), duplicate_cat_id: z.number() }),
   needsApproval: true,
   execute: ({ keep_cat_id, duplicate_cat_id }) => {
-    for (const table of ['sightings', 'flags']) {
-      db.prepare(`UPDATE ${table} SET cat_id = ? WHERE cat_id = ?`).run(
-        keep_cat_id,
-        duplicate_cat_id,
-      );
-    }
-    db.prepare('DELETE FROM cats WHERE id = ?').run(duplicate_cat_id);
+    merge(keep_cat_id, duplicate_cat_id);
     return 'Merged.';
   },
 });
@@ -184,7 +193,7 @@ const setCatStatus = tool({
   parameters: z.object({ cat_id: z.number(), status: z.enum(['adopted', 'missing']) }),
   needsApproval: true,
   execute: ({ cat_id, status }) => {
-    db.prepare('UPDATE cats SET status = ? WHERE id = ?').run(status, cat_id);
+    setStatus(cat_id, status);
     return `Marked ${status}.`;
   },
 });
@@ -201,16 +210,18 @@ Record what they report like a careful rescue coordinator would:
 1. Always call list_colonies first. Find the colony among the ones the rescue has set up: use the location's distance
    (within ~150 m is a match), or a place in the text that matches a colony's name or description.
 2. For each cat mentioned or pictured, list the colony's cats and compare coat and markings.
+   Pending cats count: another volunteer may have just reported the same cat.
    Use show_cat_photo when a photo could match. If it is clearly the same cat, log a sighting.
-   If it is clearly new, create it. Never count the same cat twice.
+   Otherwise create it; if it might be a known cat, pass that cat as maybe_same_as and the rescue will decide.
+   Never count the same cat twice.
    An ear-tip (a flat, clipped ear tip) means the cat is fixed.
 3. Log a feeding if they fed the colony.
 4. Flag urgent cases: pregnant, injured, sick, new kittens, or a colony that lost its feeder.
 5. If two records turn out to be the same cat, or a cat was adopted or went missing, use
    merge_cats or set_cat_status; a person confirms those.
 
-If no colony fits, or you can't tell the colony or whether a cat is new, ask one short question and record nothing yet.
-Reply in one or two short lines saying what you logged, in the language of the new message.
+If no colony fits or you can't tell the colony, ask one short question and record nothing yet.
+Reply in one or two short lines saying what you logged. Write in the same language as the volunteer's new message: English if they wrote in English, Spanish only if they wrote in Spanish.
 Never repeat locations or phone numbers in a reply.
 `,
   tools: [

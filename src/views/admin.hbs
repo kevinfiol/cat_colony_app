@@ -1,4 +1,4 @@
-{{#expect rooms, approvals}}
+{{#expect rooms, approvals, newCats}}
 <!doctype html>
 <html>
 <head>
@@ -11,6 +11,10 @@
     li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
     .preview { color: #555; margin: 0.25rem 0; }
     small { color: #888; }
+    .cat { display: flex; gap: 0.75rem; }
+    .cat img { width: 5rem; height: 5rem; object-fit: cover; border-radius: 0.5rem; }
+    .cat p { margin: 0.25rem 0; }
+    form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
     li.unread { animation: blink 1.5s ease-in-out infinite alternate; }
     @keyframes blink { from { background: transparent; } to { background: #fde2e2; } }
     @media (prefers-reduced-motion: reduce) {
@@ -20,6 +24,41 @@
 </head>
 <body>
   <p><a href="/admin/colonies">Colonies</a></p>
+
+  <main id="live">
+  {{#if newCats.length > 0}}
+    <h2>New cats</h2>
+    <ul>
+      {{#each newCats as cat}}
+        <li class="cat">
+          {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="">{{/if}}
+          <div>
+            <p>
+              <strong>{{ cat.name || cat.coat }}</strong> at
+              <a href="/admin/colonies/{{ cat.colony_id }}">{{ cat.colony_name }}</a>
+            </p>
+            <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
+            {{#if cat.open_flags}}<p>⚠️ {{ cat.open_flags }}</p>{{/if}}
+            <small>Reported {{ cat.sightings }} time(s) · {{ cat.created_at }} UTC</small>
+            {{#if cat.maybe_same_as}}
+              <p class="cat">
+                Maybe the same as <strong>{{ cat.same_name || cat.same_coat }}</strong>
+                {{#if cat.same_photo_message_id}}<img src="/photos/{{ cat.same_photo_message_id }}" alt="">{{/if}}
+              </p>
+            {{/if}}
+            <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+              <button name="action" value="register">Add to colony</button>
+              {{#if cat.maybe_same_as}}
+                <input type="hidden" name="into" value="{{ cat.maybe_same_as }}">
+                <button name="action" value="merge">Same cat</button>
+              {{/if}}
+              <button name="action" value="reject">Ignore</button>
+            </form>
+          </div>
+        </li>
+      {{/each}}
+    </ul>
+  {{/if}}
 
   {{#if approvals.length > 0}}
     <h2>Waiting for you</h2>
@@ -67,13 +106,14 @@
     </ul>
   {{/if}}
   </div>
+  </main>
 
   <script>
-    // Re-fetch this page and swap in the new room list on each server update.
+    // Re-fetch this page and swap in the new content on each server update.
     new EventSource('/admin/events').onmessage = async () => {
       const markup = await (await fetch('/admin')).text();
       const doc = new DOMParser().parseFromString(markup, 'text/html');
-      document.getElementById('rooms').replaceWith(doc.getElementById('rooms'));
+      document.getElementById('live').replaceWith(doc.getElementById('live'));
     };
   </script>
 </body>

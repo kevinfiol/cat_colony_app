@@ -33,8 +33,14 @@
   <ul>
     {{#each colonies as colony}}
       <li data-lat="{{ colony.lat }}" data-lng="{{ colony.lng }}" data-name="{{ colony.name }}">
-        <strong>{{ colony.name }}</strong>
+        <a href="/admin/colonies/{{ colony.id }}"><strong>{{ colony.name }}</strong></a>
         {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
+        <small>
+          {{ colony.cats }} cats · {{ colony.fixed }} fixed · {{ colony.cats - colony.fixed }} need TNR
+          {{#if colony.new_cats}} · {{ colony.new_cats }} new{{/if}}
+          {{#if colony.urgent}} · ⚠️ {{ colony.urgent }} urgent{{/if}}
+          · last fed {{ colony.last_fed_at ? colony.last_fed_at + ' UTC' : 'never' }}
+        </small>
       </li>
     {{/each}}
   </ul>

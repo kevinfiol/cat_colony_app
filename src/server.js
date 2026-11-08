@@ -8,6 +8,7 @@ const view = (name) => compile(readFileSync(`src/views/${name}.hbs`, 'utf8'));
 const adminView = view('admin');
 const chatView = view('chat');
 const coloniesView = view('colonies');
+const colonyView = view('colony');
 
 const page = (markup) =>
   new Response(markup, {
@@ -81,8 +82,30 @@ const app = new H3()
   .get('/', () => redirect('/admin'))
 
   .get('/admin', () =>
-    page(adminView({ rooms: db.listRooms(), approvals: db.listPendingApprovals() })),
+    page(
+      adminView({
+        rooms: db.listRooms(),
+        approvals: db.listPendingApprovals(),
+        newCats: db.listPendingCats(),
+      }),
+    ),
   )
+
+  // Confirms a newly reported cat, rejects it, or folds it into the cat it really is.
+  .post('/admin/cats/:id', async (event) => {
+    const id = Number(getRouterParam(event, 'id'));
+    const form = await event.req.formData();
+    const action = form.get('action');
+    if (action === 'register') db.setCatStatus(id, 'active');
+    if (action === 'reject') db.setCatStatus(id, 'rejected');
+    const into = Number(form.get('into'));
+    if (action === 'merge' && Number.isInteger(into) && into > 0 && into !== id) {
+      db.mergeCats(into, id);
+    }
+    notifyAdmins();
+    const back = form.get('back');
+    return redirect(back?.startsWith('/admin') ? back : '/admin');
+  })
 
   .post('/admin/approvals/:id', async (event) => {
     const form = await event.req.formData();
@@ -103,6 +126,19 @@ const app = new H3()
     }
     db.createColony(name, form.get('description')?.trim() || null, lat, lng);
     return redirect('/admin/colonies');
+  })
+
+  .get('/admin/colonies/:id', (event) => {
+    const colony = db.getColony(getRouterParam(event, 'id'));
+    if (!colony) throw new HTTPError({ status: 404, message: 'Colony not found' });
+    return page(
+      colonyView({
+        colony,
+        cats: db.listColonyCats(colony.id),
+        flags: db.listOpenFlags(colony.id),
+        feedings: db.listFeedings(colony.id),
+      }),
+    );
   })
 
   .get('/admin/events', (event) => subscribe(event, 'admin'))
