@@ -59,10 +59,10 @@ Read it. The core:
 - No WhatsApp scraping; exported chats or deliberate sends only.
 - Made-up data only.
 
-**Core idea: "Text the cat line."** One rescue WhatsApp number. Volunteers send whatever they'd normally send; an agent turns it into census updates.
+**Core idea: "Text the cat line."** Each volunteer gets their own chat link (`/chat/<uuid>`) in place of WhatsApp. They send whatever they'd normally send; an agent turns it into census updates.
 
 **Reporters: zero friction**
-- No app, form, or login. Send a photo, location pin, text, or voice note. Their phone number is their ID.
+- No app, form, or login. Send a photo, location pin, text, or voice note. Their chat link is their ID.
 - A location pin maps to the nearest colony automatically.
 - Vision reads coat, ear-tip (meaning already fixed), pregnancy, limp, kittens.
 - Voice notes get transcribed, in English or Spanish.
@@ -83,9 +83,4 @@ Read it. The core:
 - Codex builds the code, the fake dataset and the tests.
 
 **Dedup:** match a cat only within the same colony, by photo and markings. A confident match logs as the same cat; an unsure one goes to the review queue.
-
-**Watch-outs**
-- WhatsApp's Cloud API needs a one-time Meta business setup and a spare phone number.
-- Since October 1, 2026, Meta charges for service messages sent within the 24-hour window. Each number gets 1,000 free service messages a month, which is enough for 20 volunteers.
-- A Telegram bot is the free fallback.
 ```

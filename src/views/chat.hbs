@@ -28,14 +28,17 @@
 
   <div id="messages">
     {{#each messages as message}}
-      {{#var fromAdmin = message.sender === 'admin'}}
-      <div class="message {{ fromAdmin === isAdmin ? 'mine' : '' }}">
-        <small>{{ fromAdmin ? 'Rescue' : 'Volunteer' }}</small>
+      {{#var fromRescue = message.sender !== 'volunteer'}}
+      <div class="message {{ fromRescue === isAdmin ? 'mine' : '' }}">
+        <small>{{ message.sender === 'bot' ? 'Cat line' : fromRescue ? 'Rescue' : 'Volunteer' }}</small>
         {{#if message.has_photo}}
           <img src="/photos/{{ message.id }}" alt="Uploaded photo">
         {{/if}}
         {{#if message.text}}
           <p>{{ message.text }}</p>
+        {{/if}}
+        {{#if message.lat != null}}
+          <p>📍 Location shared</p>
         {{/if}}
         <small>{{ message.created_at }} UTC</small>
       </div>
@@ -45,6 +48,9 @@
   <form method="post" enctype="multipart/form-data">
     <textarea name="text" rows="3" placeholder="Message"></textarea>
     <input type="file" name="photo" accept="image/*">
+    <input type="hidden" name="lat">
+    <input type="hidden" name="lng">
+    <button type="button" id="locate">📍 Add my location</button>
     <button>Send</button>
   </form>
 
@@ -56,7 +62,25 @@
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await fetch(form.action, { method: 'POST', body: new FormData(form) });
+      // reset() leaves hidden inputs alone, so clear the location too.
       form.reset();
+      form.lat.value = form.lng.value = '';
+      locate.textContent = '📍 Add my location';
+    });
+
+    // Attaches the phone's current location to the next message.
+    // Browsers only allow this over HTTPS or on localhost.
+    const locate = document.getElementById('locate');
+    locate.addEventListener('click', () => {
+      locate.textContent = 'Finding you…';
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          form.lat.value = coords.latitude;
+          form.lng.value = coords.longitude;
+          locate.textContent = '📍 Location added';
+        },
+        () => (locate.textContent = '📍 Couldn’t get location, try again'),
+      );
     });
 
     // Enter sends the message; Shift+Enter adds a new line.

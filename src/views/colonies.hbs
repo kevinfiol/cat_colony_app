@@ -1,0 +1,73 @@
+{{#expect colonies}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin · Colonies</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    #map { height: 24rem; border-radius: 0.5rem; }
+    form { display: grid; gap: 0.5rem; margin: 1rem 0; }
+    ul { list-style: none; padding: 0; }
+    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
+    small { color: #888; }
+  </style>
+</head>
+<body>
+  <p><a href="/admin">← Chat rooms</a></p>
+  <h1>Colonies</h1>
+
+  <div id="map"></div>
+
+  <form method="post">
+    <small id="hint">Click the map to place a new colony.</small>
+    <input name="name" placeholder="Name, e.g. Laundromat" required>
+    <input name="description" placeholder="Where it is, e.g. behind the laundromat on NW 7th St">
+    <input type="hidden" name="lat">
+    <input type="hidden" name="lng">
+    <button>Add colony</button>
+  </form>
+
+  <ul>
+    {{#each colonies as colony}}
+      <li data-lat="{{ colony.lat }}" data-lng="{{ colony.lng }}" data-name="{{ colony.name }}">
+        <strong>{{ colony.name }}</strong>
+        {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
+      </li>
+    {{/each}}
+  </ul>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([25.7617, -80.1918], 12); // Miami
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    for (const li of document.querySelectorAll('li[data-lat]')) {
+      L.marker([li.dataset.lat, li.dataset.lng]).addTo(map).bindTooltip(li.dataset.name);
+    }
+
+    // Clicking the map picks the new colony's spot.
+    const form = document.querySelector('form');
+    let pick;
+    map.on('click', ({ latlng }) => {
+      pick?.remove();
+      pick = L.circleMarker(latlng, { color: '#d33' }).addTo(map);
+      form.lat.value = latlng.lat;
+      form.lng.value = latlng.lng;
+      document.getElementById('hint').textContent = 'Spot picked. Name it and add it.';
+    });
+
+    form.addEventListener('submit', (event) => {
+      if (!form.lat.value) {
+        event.preventDefault();
+        alert('Click the map to place the colony first.');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-{{#expect rooms}}
+{{#expect rooms, approvals}}
 <!doctype html>
 <html>
 <head>
@@ -19,6 +19,24 @@
   </style>
 </head>
 <body>
+  <p><a href="/admin/colonies">Colonies</a></p>
+
+  {{#if approvals.length > 0}}
+    <h2>Waiting for you</h2>
+    <ul>
+      {{#each approvals as approval}}
+        <li>
+          <p>{{ approval.summary }}</p>
+          <small><a href="/admin/chat/{{ approval.room_id }}">From this chat</a> · {{ approval.created_at }} UTC</small>
+          <form method="post" action="/admin/approvals/{{ approval.id }}">
+            <button name="approved" value="1">Approve</button>
+            <button name="approved" value="0">Reject</button>
+          </form>
+        </li>
+      {{/each}}
+    </ul>
+  {{/if}}
+
   <h1>Chat rooms</h1>
 
   <form method="post" action="/admin/rooms">
