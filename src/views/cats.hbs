@@ -7,12 +7,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin · Cats</title>
   <link rel="stylesheet" href="/app.css">
-  <style>
-    .same { background: #e6f0ff; border-radius: 0.5rem; padding: 0.5rem; margin-top: 0.5rem; }
-  </style>
 </head>
 <body>
-  <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats" aria-current="page">Cats</a>{{{ notifications }}}</nav>
+  <div class="shell">
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <aside class="sidebar">
+      <a class="brand" href="/admin"><span class="brand-mark">🐱</span>Cat Keeper</a>
+      <nav class="side-nav" aria-label="Admin">
+        <a href="/admin">🏠 <span>Today</span></a>
+        <a href="/admin/colonies">📍 <span>Colonies</span></a>
+        <a href="/admin/cats" aria-current="page">🐾 <span>Cats</span></a>
+      </nav>
+    </aside>
+    <label for="nav-toggle" class="nav-scrim" aria-hidden="true"></label>
+    <div class="main-col">
+      <header class="topbar">
+        <label for="nav-toggle" class="menu-btn" aria-label="Open menu">☰</label>
+        {{{ notifications }}}
+      </header>
+      <main class="content">
   <h1>Cats</h1>
 
   <div class="stats">
@@ -115,6 +128,9 @@
       {{/each}}
     </ul>
   {{/if}}
+      </main>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>

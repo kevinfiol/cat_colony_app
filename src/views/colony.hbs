@@ -10,7 +10,23 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies" aria-current="page">Colonies</a><a href="/admin/cats">Cats</a>{{{ notifications }}}</nav>
+  <div class="shell">
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <aside class="sidebar">
+      <a class="brand" href="/admin"><span class="brand-mark">🐱</span>Cat Keeper</a>
+      <nav class="side-nav" aria-label="Admin">
+        <a href="/admin">🏠 <span>Today</span></a>
+        <a href="/admin/colonies" aria-current="page">📍 <span>Colonies</span></a>
+        <a href="/admin/cats">🐾 <span>Cats</span></a>
+      </nav>
+    </aside>
+    <label for="nav-toggle" class="nav-scrim" aria-hidden="true"></label>
+    <div class="main-col">
+      <header class="topbar">
+        <label for="nav-toggle" class="menu-btn" aria-label="Open menu">☰</label>
+        {{{ notifications }}}
+      </header>
+      <main class="content">
   <p><a href="/admin/colonies">← All colonies</a></p>
   <h1>{{ colony.name }}</h1>
   {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
@@ -143,6 +159,9 @@
       </ul>
     </details>
   {{/if}}
+      </main>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>

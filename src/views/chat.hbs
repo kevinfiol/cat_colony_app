@@ -7,14 +7,14 @@
   <title>{{ room.name }} · Cathy (AI Assistant)</title>
   <link rel="stylesheet" href="/app.css">
   <style>
-    body { margin-bottom: 0; }
-    .message { background: #f1f1f1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
-    .message img { display: block; max-width: 100%; max-height: 20rem; border-radius: 0.25rem; }
-    .message.mine { background: #dbeafe; margin-left: 3rem; }
+    body:not(:has(.shell)) { margin-bottom: 0; }
+    .message { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
+    .message img { display: block; max-width: 100%; max-height: 20rem; border-radius: var(--radius-sm); }
+    .message.mine { background: #e4ebff; border-color: var(--brand-1); margin-left: 3rem; }
     .message:not(.mine) { margin-right: 3rem; }
-    .typing { color: #555; font-style: italic; }
+    .typing { color: var(--muted); font-style: italic; }
     /* Keeps the send box on screen while scrolling through the chat, like a messaging app. */
-    #send { position: sticky; bottom: 0; background: white; border-top: 1px solid #ddd; padding: 0.5rem 0 1rem; display: grid; gap: 0.5rem; }
+    #send { position: sticky; bottom: 0; background: var(--card); border-top: 1px solid var(--border); padding: 0.75rem 0 1rem; display: grid; gap: 0.5rem; }
     #send textarea { width: 100%; box-sizing: border-box; resize: vertical; }
     .actions button[type=submit] { margin-left: auto; }
     #volunteer-link { width: 100%; box-sizing: border-box; }
@@ -22,7 +22,23 @@
 </head>
 <body>
   {{#if isAdmin}}
-    <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a>{{{ notifications }}}</nav>
+  <div class="shell">
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <aside class="sidebar">
+      <a class="brand" href="/admin"><span class="brand-mark">🐱</span>Cat Keeper</a>
+      <nav class="side-nav" aria-label="Admin">
+        <a href="/admin">🏠 <span>Today</span></a>
+        <a href="/admin/colonies">📍 <span>Colonies</span></a>
+        <a href="/admin/cats">🐾 <span>Cats</span></a>
+      </nav>
+    </aside>
+    <label for="nav-toggle" class="nav-scrim" aria-hidden="true"></label>
+    <div class="main-col">
+      <header class="topbar">
+        <label for="nav-toggle" class="menu-btn" aria-label="Open menu">☰</label>
+        {{{ notifications }}}
+      </header>
+      <main class="content">
     <h1>{{ room.name }}</h1>
     <label>
       Volunteer link. Send it to {{ room.name }}; anyone with it can post as them.
@@ -83,6 +99,11 @@
     </div>
     <small id="status" role="status"></small>
   </form>
+  {{#if isAdmin}}
+      </main>
+    </div>
+  </div>
+  {{/if}}
 
   <script src="/app.js"></script>
   <script>

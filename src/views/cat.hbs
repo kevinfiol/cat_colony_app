@@ -8,13 +8,29 @@
   <title>Admin · {{ cat.name || cat.coat }}</title>
   <link rel="stylesheet" href="/app.css">
   <style>
-    img.photo, li img { display: block; width: 100%; max-height: 24rem; object-fit: contain; border-radius: 0.5rem; }
-    section { border: 1px solid #ddd; border-radius: 0.5rem; padding: 0.5rem 0.75rem; margin: 1rem 0; }
+    img.photo, li img { display: block; width: 100%; max-height: 24rem; object-fit: contain; border-radius: var(--radius-sm); }
+    section { border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow); padding: 0.75rem 1rem; margin: 1rem 0; }
     section h2 { margin: 0; font-size: 1rem; }
   </style>
 </head>
 <body>
-  <nav class="admin-nav" aria-label="Admin"><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats" aria-current="page">Cats</a>{{{ notifications }}}</nav>
+  <div class="shell">
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <aside class="sidebar">
+      <a class="brand" href="/admin"><span class="brand-mark">🐱</span>Cat Keeper</a>
+      <nav class="side-nav" aria-label="Admin">
+        <a href="/admin">🏠 <span>Today</span></a>
+        <a href="/admin/colonies">📍 <span>Colonies</span></a>
+        <a href="/admin/cats" aria-current="page">🐾 <span>Cats</span></a>
+      </nav>
+    </aside>
+    <label for="nav-toggle" class="nav-scrim" aria-hidden="true"></label>
+    <div class="main-col">
+      <header class="topbar">
+        <label for="nav-toggle" class="menu-btn" aria-label="Open menu">☰</label>
+        {{{ notifications }}}
+      </header>
+      <main class="content">
   <p><a href="/admin/colonies/{{ cat.colony_id }}">← {{ cat.colony_name }}</a></p>
   <h1>{{ cat.name || cat.coat }}</h1>
   {{#if cat.photo_message_id}}<img class="photo" src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}">{{/if}}
@@ -148,6 +164,9 @@
       </li>
     {{/each}}
   </ul>
+      </main>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>

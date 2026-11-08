@@ -6,6 +6,7 @@ import { respond, decide, applyHandledNote } from './agent.js';
 import { readColonyLocation, searchAddresses } from './locations.js';
 
 const view = (name) => compile(readFileSync(`src/views/${name}.hbs`, 'utf8'));
+const landingView = view('landing');
 const adminView = view('admin');
 const chatView = view('chat');
 const coloniesView = view('colonies');
@@ -127,7 +128,7 @@ const app = new H3({ onError: errorPage })
   .get('/app.css', asset('app.css', 'text/css; charset=utf-8'))
   .get('/app.js', asset('app.js', 'text/javascript; charset=utf-8'))
   .get('/colonies.js', asset('colonies.js', 'text/javascript; charset=utf-8'))
-  .get('/', () => redirect('/admin'))
+  .get('/', () => page(landingView()))
 
   .get('/admin', () =>
     adminPage(adminView, {

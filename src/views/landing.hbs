@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cat Keeper</title>
+  <meta name="description" content="Cat Keeper helps TNR rescues track colonies and cats while volunteers text updates straight to an AI assistant.">
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    body.landing {
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(160deg, var(--brand-1), var(--brand-2));
+    }
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2.25rem;
+      padding: 3rem 1.25rem;
+    }
+    .hero-card {
+      background: var(--card);
+      border-radius: 1.75rem;
+      box-shadow: var(--shadow-md);
+      padding: 2.5rem 2.25rem;
+      max-width: 34rem;
+      text-align: center;
+    }
+    .hero-mark {
+      font-size: 3.5rem;
+      line-height: 1;
+    }
+    .hero-card h1 {
+      font-size: 2.2rem;
+      margin: 0.5rem 0 0.25rem;
+    }
+    .tagline {
+      font-family: var(--font-display);
+      font-weight: 600;
+      color: var(--brand-2);
+      font-size: 1.1rem;
+      margin: 0 0 1rem;
+    }
+    .blurb {
+      color: var(--ink);
+      line-height: 1.6;
+      margin: 0 0 1.5rem;
+    }
+    .cta {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-weight: 700;
+      background: var(--coral);
+      color: #fff;
+      text-decoration: none;
+      padding: 0.85rem 1.75rem;
+      border-radius: 999px;
+      box-shadow: var(--shadow);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .cta:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: 1.25rem;
+      width: 100%;
+      max-width: 56rem;
+    }
+    .feature {
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 1.1rem;
+      padding: 1.25rem 1.4rem;
+      color: #fff;
+    }
+    .feature span {
+      font-size: 1.6rem;
+    }
+    .feature h2 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      margin: 0.4rem 0 0.3rem;
+      color: #fff;
+    }
+    .feature p {
+      margin: 0;
+      font-size: 0.92rem;
+      color: #eef1ff;
+      line-height: 1.4;
+    }
+    .footnote {
+      color: #eef1ff;
+      font-size: 0.85rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body class="landing">
+  <main class="hero">
+    <div class="hero-card">
+      <div class="hero-mark">🐱</div>
+      <h1>Cat Keeper</h1>
+      <p class="tagline">The TNR sidekick for your rescue.</p>
+      <p class="blurb">
+        Volunteers just text photos, locations, and quick notes — Cathy, our AI assistant, turns
+        them into colony records, new cat reports, and feeding logs automatically. You review
+        what needs a decision, and everything else takes care of itself.
+      </p>
+      <a class="cta" href="/admin">Open the dashboard →</a>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <span>📍</span>
+        <h2>Colonies, mapped</h2>
+        <p>Every colony's location, cats, and feeding history in one place.</p>
+      </div>
+      <div class="feature">
+        <span>🐾</span>
+        <h2>TNR at a glance</h2>
+        <p>See which cats are fixed, pending, or still need a trap.</p>
+      </div>
+      <div class="feature">
+        <span>💬</span>
+        <h2>Texts become records</h2>
+        <p>Volunteers chat with Cathy; she logs it so you don't have to.</p>
+      </div>
+    </div>
+
+    <p class="footnote">Made for the volunteers who feed, trap, and track their colonies 🐾</p>
+  </main>
+</body>
+</html>
