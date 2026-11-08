@@ -22,10 +22,13 @@
   <details id="add">
     <summary>Add a colony</summary>
     <form method="post">
-      <small id="hint" role="status">Click the map to place the new colony.</small>
+      <small id="hint" role="status">Click the map to place the new colony, or type an address and find it below.</small>
       <input name="name" aria-label="Name" placeholder="Name, e.g. Laundromat" required>
       <input name="description" aria-label="Where it is" placeholder="Where it is, e.g. behind the laundromat">
-      <input name="address" aria-label="Address" placeholder="Address, e.g. 701 NW 7th St, Miami, FL">
+      <span class="actions">
+        <input name="address" id="address" aria-label="Address" placeholder="Address, e.g. 701 NW 7th St, Miami, FL">
+        <button type="button" id="find">🔎 Find on map</button>
+      </span>
       <input type="hidden" name="lat">
       <input type="hidden" name="lng">
       <button>Add colony</button>
@@ -85,10 +88,46 @@
       form.name.focus();
     });
 
+    // Looks up the typed address and places the same pin the map-click above does, so there's
+    // one location either way instead of the address field silently doing nothing on its own.
+    const find = document.getElementById('find');
+    find.addEventListener('click', async () => {
+      const address = document.getElementById('address').value.trim();
+      if (!address) {
+        hint.textContent = 'Type an address above first.';
+        return hint.classList.add('missing');
+      }
+      find.disabled = true;
+      find.textContent = 'Finding…';
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+        const [result] = await (await fetch(url)).json();
+        if (!result) {
+          hint.textContent = "Couldn't find that address. Click the map to place it instead.";
+          return hint.classList.add('missing');
+        }
+        const latlng = { lat: Number(result.lat), lng: Number(result.lon) };
+        pick?.remove();
+        pick = L.circleMarker(latlng, { color: '#d33' }).addTo(map);
+        form.lat.value = latlng.lat;
+        form.lng.value = latlng.lng;
+        map.setView(latlng, 17);
+        hint.textContent = 'Found it. Fine-tune by clicking the map if needed, then name it and add it.';
+        hint.classList.remove('missing');
+        form.name.focus();
+      } catch {
+        hint.textContent = "Couldn't look up that address. Click the map to place it instead.";
+        hint.classList.add('missing');
+      } finally {
+        find.disabled = false;
+        find.textContent = '🔎 Find on map';
+      }
+    });
+
     form.addEventListener('submit', (event) => {
       if (form.lat.value) return;
       event.preventDefault();
-      hint.textContent = 'Click the map to place the colony first.';
+      hint.textContent = 'Click the map, or find an address, to place the colony first.';
       hint.classList.add('missing');
       document.getElementById('map').scrollIntoView({ behavior: 'smooth' });
     });

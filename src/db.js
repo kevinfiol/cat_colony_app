@@ -77,6 +77,20 @@ export function getPhoto(messageId) {
     .get(messageId);
 }
 
+// The most recent photo sent in this room before the given message, if any, within the
+// last half hour - so a cat's photo isn't lost if the colony/details come in a reply after it,
+// but an old photo from an unrelated earlier visit doesn't get attached by mistake.
+export function recentPhotoMessage(roomId, beforeMessageId) {
+  return db
+    .prepare(`
+    SELECT id, created_at FROM messages
+    WHERE room_id = ? AND id < ? AND photo_type IS NOT NULL
+      AND created_at >= datetime('now', '-30 minutes')
+    ORDER BY id DESC LIMIT 1
+  `)
+    .get(roomId, beforeMessageId);
+}
+
 // Each colony with its current state.
 export function listColonies() {
   return db
@@ -103,7 +117,7 @@ export function listColonyCats(colonyId) {
     SELECT c.*,
            (SELECT COUNT(*) FROM sightings WHERE cat_id = c.id) AS sightings,
            (SELECT MAX(created_at) FROM sightings WHERE cat_id = c.id) AS last_seen_at,
-           (SELECT group_concat(kind, ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
+           (SELECT group_concat(REPLACE(kind, '_', ' '), ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
     FROM cats c WHERE c.colony_id = ? AND c.status IN ('pending', 'active')
     ORDER BY c.status = 'pending' DESC, c.id
   `)
@@ -117,7 +131,7 @@ export function listPendingCats() {
     SELECT c.*, col.name AS colony_name, same.name AS same_name, same.coat AS same_coat,
            same.photo_message_id AS same_photo_message_id,
            (SELECT COUNT(*) FROM sightings WHERE cat_id = c.id) AS sightings,
-           (SELECT group_concat(kind, ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
+           (SELECT group_concat(REPLACE(kind, '_', ' '), ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
     FROM cats c
     JOIN colonies col ON col.id = c.colony_id
     LEFT JOIN cats same ON same.id = c.maybe_same_as
@@ -149,19 +163,31 @@ export function logFeeding(colonyId, roomId = null, messageId = null) {
 export function listOpenFlags(colonyId = null) {
   return db
     .prepare(`
-    SELECT f.id, f.kind, f.note, f.created_at, f.colony_id, f.cat_id, col.name AS colony_name,
-           c.name AS cat_name, c.coat AS cat_coat
+    SELECT f.id, REPLACE(f.kind, '_', ' ') AS kind, f.note, f.created_at, f.colony_id, f.cat_id,
+           col.name AS colony_name, c.name AS cat_name, c.coat AS cat_coat
     FROM flags f JOIN colonies col ON col.id = f.colony_id LEFT JOIN cats c ON c.id = f.cat_id
     WHERE (?1 IS NULL OR f.colony_id = ?1) AND f.resolved_at IS NULL ORDER BY f.id DESC
   `)
     .all(colonyId);
 }
 
+// A single cat's unresolved urgent cases, newest first, so each can be reviewed and
+// resolved on its own instead of one "Handled" lumping every open flag together.
+export function listCatFlags(catId) {
+  return db
+    .prepare(`
+    SELECT id, REPLACE(kind, '_', ' ') AS kind, note, created_at
+    FROM flags WHERE cat_id = ? AND resolved_at IS NULL ORDER BY id DESC
+  `)
+    .all(catId);
+}
+
 // The colony's handled urgent cases, newest first, with what the rescue wrote.
 export function listHandledFlags(colonyId) {
   return db
     .prepare(`
-    SELECT f.kind, f.note, f.resolution, f.resolved_at, f.cat_id, c.name AS cat_name, c.coat AS cat_coat
+    SELECT REPLACE(f.kind, '_', ' ') AS kind, f.note, f.resolution, f.resolved_at, f.cat_id,
+           c.name AS cat_name, c.coat AS cat_coat
     FROM flags f LEFT JOIN cats c ON c.id = f.cat_id
     WHERE f.colony_id = ? AND f.resolved_at IS NOT NULL ORDER BY f.resolved_at DESC LIMIT 20
   `)
@@ -199,7 +225,7 @@ export function listAllCats() {
            same.photo_message_id AS same_photo_message_id,
            (SELECT COUNT(*) FROM sightings WHERE cat_id = c.id) AS sightings,
            (SELECT MAX(created_at) FROM sightings WHERE cat_id = c.id) AS last_seen_at,
-           (SELECT group_concat(kind, ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
+           (SELECT group_concat(REPLACE(kind, '_', ' '), ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
     FROM cats c JOIN colonies col ON col.id = c.colony_id
     LEFT JOIN cats same ON same.id = c.maybe_same_as AND same.status != 'rejected'
     WHERE c.status != 'rejected'
@@ -212,7 +238,15 @@ export function listAllCats() {
 // agent is still reporting (status 'pending', with photoMessageId/maybeSameAs from the sighting).
 export function createCat(
   colonyId,
-  { name = null, coat, markings = null, fixed = false, photoMessageId = null, maybeSameAs = null, status = 'active' },
+  {
+    name = null,
+    coat,
+    markings = null,
+    fixed = false,
+    photoMessageId = null,
+    maybeSameAs = null,
+    status = 'active',
+  },
 ) {
   const { lastInsertRowid } = db
     .prepare(`
@@ -231,7 +265,7 @@ export function getCat(id) {
   return db
     .prepare(`
     SELECT c.*, col.name AS colony_name,
-           (SELECT group_concat(kind, ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
+           (SELECT group_concat(REPLACE(kind, '_', ' '), ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
     FROM cats c JOIN colonies col ON col.id = c.colony_id WHERE c.id = ?
   `)
     .get(id);
@@ -247,9 +281,9 @@ export function listCatHistory(catId) {
     FROM sightings s JOIN messages m ON m.id = s.message_id JOIN rooms r ON r.id = m.room_id
     WHERE s.cat_id = ?1
     UNION ALL
-    SELECT created_at, 'Urgent: ' || kind, note, NULL, 0, NULL, NULL FROM flags WHERE cat_id = ?1
+    SELECT created_at, 'Urgent: ' || REPLACE(kind, '_', ' '), note, NULL, 0, NULL, NULL FROM flags WHERE cat_id = ?1
     UNION ALL
-    SELECT resolved_at, 'Handled: ' || kind, resolution, NULL, 0, NULL, NULL
+    SELECT resolved_at, 'Handled: ' || REPLACE(kind, '_', ' '), resolution, NULL, 0, NULL, NULL
     FROM flags WHERE cat_id = ?1 AND resolved_at IS NOT NULL
     UNION ALL
     SELECT created_at, what, note, NULL, 0, NULL, NULL FROM cat_events WHERE cat_id = ?1
@@ -304,10 +338,12 @@ export function markFixed(catId) {
   if (changes) logCatEvent(catId, 'Fixed (TNR done)');
 }
 
-export function resolveCatFlags(catId, note) {
-  db.prepare(
-    'UPDATE flags SET resolved_at = CURRENT_TIMESTAMP, resolution = ? WHERE cat_id = ? AND resolved_at IS NULL',
-  ).run(note, catId);
+// Undoes a mistaken "fixed" mark.
+export function unmarkFixed(catId) {
+  const { changes } = db
+    .prepare('UPDATE cats SET fixed = 0, fixed_at = NULL WHERE id = ? AND fixed')
+    .run(catId);
+  if (changes) logCatEvent(catId, 'Un-fixed (mistake undone)');
 }
 
 // Moves a cat registered to the wrong colony, along with its flags.

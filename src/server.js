@@ -156,12 +156,8 @@ const app = new H3({ onError: errorPage })
     const colonyId = Number(form.get('colony_id'));
     if (action === 'move' && db.getColony(colonyId)) db.moveCat(id, colonyId);
     if (action === 'fixed') db.markFixed(id);
+    if (action === 'unfix') db.unmarkFixed(id);
     const note = form.get('note')?.trim() || null;
-    const cat = db.getCat(id);
-    if (action === 'resolve' && cat?.open_flags) {
-      db.resolveCatFlags(id, note);
-      if (note) applyInBackground(cat.colony_id, id, cat.open_flags, note);
-    }
     if (action === 'note' && note) db.logCatEvent(id, 'Note', note);
     if (action === 'not_same') db.clearSameCat(id);
     if (action === 'edit') {
@@ -172,9 +168,11 @@ const app = new H3({ onError: errorPage })
         coat,
         markings: form.get('markings')?.trim() || null,
       });
+      const status = form.get('status');
+      if (db.CAT_STATUSES.includes(status) && status !== db.getCat(id).status) {
+        db.setCatStatus(id, status);
+      }
     }
-    const status = form.get('status');
-    if (action === 'set_status' && db.CAT_STATUSES.includes(status)) db.setCatStatus(id, status);
     notifyAdmins();
     let back = form.get('back');
     // A merged record is gone, so show the cat it was merged into instead.
@@ -236,12 +234,15 @@ const app = new H3({ onError: errorPage })
     const history = db.listCatHistory(cat.id);
     // Every photo of this cat: sighting photos from chat, and ones the rescue uploaded directly.
     const photos = [
-      ...history.filter((entry) => entry.has_photo).map((h) => ({ url: `/photos/${h.message_id}`, at: h.at })),
+      ...history
+        .filter((entry) => entry.has_photo)
+        .map((h) => ({ url: `/photos/${h.message_id}`, at: h.at })),
       ...db.listCatPhotos(cat.id).map((p) => ({ url: `/cat-photos/${p.id}`, at: p.created_at })),
     ].sort((a, b) => (a.at < b.at ? 1 : -1));
     return page(
       catView({
         cat,
+        flags: db.listCatFlags(cat.id),
         history,
         photos,
         statuses: db.CAT_STATUSES,
@@ -257,7 +258,8 @@ const app = new H3({ onError: errorPage })
     if (!db.getCat(id)) throw new HTTPError({ status: 404, message: 'Cat not found' });
     const form = await event.req.formData();
     const file = form.get('photo');
-    const isImage = file?.size > 0 && file.type.startsWith('image/') && file.type !== 'image/svg+xml';
+    const isImage =
+      file?.size > 0 && file.type.startsWith('image/') && file.type !== 'image/svg+xml';
     if (!isImage) throw new HTTPError({ status: 400, message: 'Choose an image to upload.' });
     db.addCatPhoto(id, new Uint8Array(await file.arrayBuffer()), file.type);
     notifyAdmins();

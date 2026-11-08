@@ -31,7 +31,9 @@
   </div>
 
   <h2>Urgent</h2>
-  {{#if flags.length > 0}}
+  {{#if flags.length === 0}}
+    <p>✓ Nothing urgent here.</p>
+  {{#else}}
     <ul>
       {{#each flags as flag}}
         <li class="urgent">
