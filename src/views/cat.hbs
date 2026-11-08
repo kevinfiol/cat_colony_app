@@ -1,4 +1,4 @@
-{{#expect cat, history, colonies, others, notifications}}
+{{#expect cat, flags, history, photos, statuses, colonies, others, notifications}}
 {{#var back = '/admin/cats/' + cat.id}}
 <!doctype html>
 <html lang="en">
@@ -22,14 +22,39 @@
   {{#if cat.status !== 'active'}}<p><strong>{{ cat.status === 'pending' ? 'New, not confirmed yet' : 'Marked ' + cat.status }}</strong></p>{{/if}}
   {{#if cat.fixed_at}}<p>Fixed by us <time datetime="{{ cat.fixed_at }}">{{ cat.fixed_at }} UTC</time></p>{{/if}}
 
-  {{#if cat.open_flags}}
+  <details>
+    <summary>Edit name, coat, markings or status</summary>
+    <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <label>Name <input name="name" value="{{ cat.name }}"></label>
+      <label>Coat <input name="coat" value="{{ cat.coat }}" required></label>
+      <label>Markings <input name="markings" value="{{ cat.markings }}"></label>
+      <label>Status
+        <select name="status">
+          {{#each statuses as s}}<option value="{{ s }}" {{ s === cat.status ? 'selected' : '' }}>{{ s }}</option>{{/each}}
+        </select>
+      </label>
+      <button name="action" value="edit">Save</button>
+    </form>
+  </details>
+
+  {{#if flags.length > 0}}
     <section class="urgent">
-      <h2>⚠️ Urgent: {{ cat.open_flags }}</h2>
-      <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
-        <input type="hidden" name="back" value="{{ back }}">
-        <input name="note" aria-label="What was done?" placeholder="What was done? (optional)">
-        <button name="action" value="resolve">Handled</button>
-      </form>
+      <h2>⚠️ Urgent ({{ flags.length }})</h2>
+      <ul>
+        {{#each flags as flag}}
+          <li>
+            <strong>{{ flag.kind }}</strong>
+            {{#if flag.note}}<p>{{ flag.note }}</p>{{/if}}
+            <small><time datetime="{{ flag.created_at }}">{{ flag.created_at }} UTC</time></small>
+            <form class="inline" method="post" action="/admin/flags/{{ flag.id }}">
+              <input type="hidden" name="back" value="{{ back }}">
+              <input name="note" aria-label="What was done?" placeholder="What was done? (optional)">
+              <button>Handled</button>
+            </form>
+          </li>
+        {{/each}}
+      </ul>
     </section>
   {{/if}}
 
@@ -48,6 +73,11 @@
     <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
       <input type="hidden" name="back" value="{{ back }}">
       <button name="action" value="fixed" data-confirm="Mark {{ cat.name || cat.coat }} as fixed (TNR done)?">Fixed (TNR done)</button>
+    </form>
+  {{#else}}
+    <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <button name="action" value="unfix" data-confirm="Undo marking {{ cat.name || cat.coat }} as fixed? Use this only to correct a mistake.">Undo "Fixed"</button>
     </form>
   {{/if}}
 
@@ -81,6 +111,21 @@
       <p class="hint">No other cats in {{ cat.colony_name }} to merge with. Move this one first if its twin is in another colony.</p>
     {{/if}}
   </details>
+
+  <h2>Photos</h2>
+  <form class="inline" method="post" action="/admin/cats/{{ cat.id }}/photos" enctype="multipart/form-data">
+    <input type="file" name="photo" accept="image/*" required>
+    <button>Upload photo</button>
+  </form>
+  {{#if photos.length > 0}}
+    <div class="photo-grid">
+      {{#each photos as p}}
+        <a href="{{ p.url }}" target="_blank"><img src="{{ p.url }}" alt="" loading="lazy"></a>
+      {{/each}}
+    </div>
+  {{#else}}
+    <p class="hint">No photos yet.</p>
+  {{/if}}
 
   <h2>History</h2>
   <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">

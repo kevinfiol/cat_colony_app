@@ -1,6 +1,18 @@
 import { Agent, run, tool, RunState, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { db, addMessage, getCat, getPhoto, markFixed, setCatStatus as setStatus } from './db.js';
+import {
+  db,
+  addMessage,
+  getCat,
+  getPhoto,
+  recentPhotoMessage,
+  markFixed,
+  setCatStatus as setStatus,
+  createCat as createCatRow,
+  logFeeding as logFeedingRow,
+  createFlag,
+  FLAG_KINDS,
+} from './db.js';
 
 // Traces would send colony locations and feeder details to OpenAI's dashboard.
 setTracingDisabled(true);
@@ -82,22 +94,16 @@ const createCat = tool({
       .describe('A known cat this might be, if you are not sure it is new'),
   }),
   execute: ({ colony_id, name, coat, markings, fixed, note, maybe_same_as }, runContext) => {
-    const { messageId, hasPhoto } = current(runContext);
-    const { lastInsertRowid } = db
-      .prepare(`
-        INSERT INTO cats (colony_id, name, coat, markings, fixed, photo_message_id, maybe_same_as, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-      `)
-      .run(
-        colony_id,
-        name,
-        coat,
-        markings,
-        fixed ? 1 : 0,
-        hasPhoto ? messageId : null,
-        maybe_same_as,
-      );
-    const catId = Number(lastInsertRowid);
+    const { messageId, photoMessageId } = current(runContext);
+    const catId = createCatRow(colony_id, {
+      name,
+      coat,
+      markings,
+      fixed,
+      photoMessageId,
+      maybeSameAs: maybe_same_as,
+      status: 'pending',
+    });
     db.prepare('INSERT INTO sightings (cat_id, message_id, note) VALUES (?, ?, ?)').run(
       catId,
       messageId,
@@ -119,7 +125,7 @@ const logSighting = tool({
     fixed: z.boolean().nullable(),
   }),
   execute: ({ cat_id, note, name, markings, fixed }, runContext) => {
-    const { messageId, hasPhoto } = current(runContext);
+    const { messageId, photoMessageId } = current(runContext);
     db.prepare('INSERT INTO sightings (cat_id, message_id, note) VALUES (?, ?, ?)').run(
       cat_id,
       messageId,
@@ -132,13 +138,7 @@ const logSighting = tool({
         fixed = COALESCE(?, fixed),
         photo_message_id = COALESCE(photo_message_id, ?)
       WHERE id = ?
-    `).run(
-      name,
-      markings,
-      fixed == null ? null : fixed ? 1 : 0,
-      hasPhoto ? messageId : null,
-      cat_id,
-    );
+    `).run(name, markings, fixed == null ? null : fixed ? 1 : 0, photoMessageId, cat_id);
     return 'Logged.';
   },
 });
@@ -149,11 +149,7 @@ const logFeeding = tool({
   parameters: z.object({ colony_id: z.number() }),
   execute: ({ colony_id }, runContext) => {
     const { roomId, messageId } = current(runContext);
-    db.prepare('INSERT INTO feedings (colony_id, room_id, message_id) VALUES (?, ?, ?)').run(
-      colony_id,
-      roomId,
-      messageId,
-    );
+    logFeedingRow(colony_id, roomId, messageId);
     return 'Logged.';
   },
 });
@@ -164,16 +160,11 @@ const flagUrgent = tool({
   parameters: z.object({
     colony_id: z.number(),
     cat_id: z.number().nullable(),
-    kind: z.enum(['pregnant', 'injured', 'sick', 'kittens', 'no_feeder']),
+    kind: z.enum(FLAG_KINDS),
     note: z.string(),
   }),
   execute: ({ colony_id, cat_id, kind, note }) => {
-    db.prepare('INSERT INTO flags (colony_id, cat_id, kind, note) VALUES (?, ?, ?, ?)').run(
-      colony_id,
-      cat_id,
-      kind,
-      note,
-    );
+    createFlag(colony_id, cat_id, kind, note);
     return 'Flagged.';
   },
 });
@@ -220,9 +211,16 @@ Record what they report like a careful rescue coordinator would:
    (within ~150 m is a match), or a place in the text that matches a colony's name or description.
 2. For each cat mentioned or pictured, list the colony's cats and compare coat and markings.
    Pending cats count: another volunteer may have just reported the same cat.
-   Use show_cat_photo when a photo could match. If it is clearly the same cat, log a sighting.
-   Otherwise create it; if it might be a known cat, pass that cat as maybe_same_as and the rescue will decide.
-   Never count the same cat twice.
+   Use show_cat_photo when a photo could match.
+   Matching cats by photo is never certain, especially for common, nondescript coats (solid black,
+   solid gray, solid white, plain tabby) that many different cats share. Never call log_sighting to
+   decide a new photo belongs to a known cat, however sure it looks - a person at the rescue must
+   confirm before two records become one. Only use log_sighting when identity isn't actually in
+   question: the volunteer names a cat that matches one you already know, or this message plainly
+   continues the exact report you already pinned to this cat earlier in the same exchange (no new or
+   conflicting photo). Otherwise create the cat; if it might already be a known cat, pass that cat as
+   maybe_same_as so the rescue can compare photos and decide. Never count the same cat twice, and
+   never decide two different reports are the same cat on your own.
    An ear-tip (a flat, clipped ear tip) means the cat is fixed.
 3. Log a feeding if they fed the colony.
 4. Flag urgent cases: pregnant, injured, sick, new kittens, or a colony that lost its feeder.
@@ -299,15 +297,23 @@ export async function respond(roomId, messageId) {
       text: `Earlier in this chat:\n${history(roomId, messageId) || '(nothing)'}\n\nNew message, sent ${message.created_at} UTC.\nLocation: ${location}\nText: ${message.text ?? '(none)'}`,
     },
   ];
-  if (message.photo_type) content.push({ type: 'input_image', image: photoUrl(messageId) });
 
-  const context = {
-    roomId,
-    messageId,
-    lat: message.lat,
-    lng: message.lng,
-    hasPhoto: Boolean(message.photo_type),
-  };
+  // If this message has no photo of its own, fall back to the most recent one sent in this
+  // room, so a cat's photo isn't lost when the colony or details are given in a later reply.
+  let photoMessageId = null;
+  if (message.photo_type) {
+    photoMessageId = messageId;
+    content.push({ type: 'input_image', image: photoUrl(messageId) });
+  } else {
+    const recent = recentPhotoMessage(roomId, messageId);
+    if (recent) {
+      photoMessageId = recent.id;
+      content[0].text += `\n\nNo new photo this time, but a photo was sent earlier in this chat (${recent.created_at} UTC), attached below in case this message is still about that same cat.`;
+      content.push({ type: 'input_image', image: photoUrl(recent.id) });
+    }
+  }
+
+  const context = { roomId, messageId, lat: message.lat, lng: message.lng, photoMessageId };
   finish(await run(agent, [{ role: 'user', content }], { context }), roomId);
 }
 
@@ -360,7 +366,7 @@ const logRescueFeeding = tool({
   description: 'Log that the rescue fed a colony.',
   parameters: z.object({ colony_id: z.number() }),
   execute: ({ colony_id }) => {
-    db.prepare('INSERT INTO feedings (colony_id) VALUES (?)').run(colony_id);
+    logFeedingRow(colony_id);
     return 'Logged.';
   },
 });
@@ -377,7 +383,10 @@ Update the census to match what they wrote, and nothing more:
 - If a cat was spayed or neutered, call mark_fixed.
 - If the rescue fed the colony, call log_feeding.
 - If a cat was adopted, went missing or died, call set_cat_status.
-- If something still needs the rescue's attention (e.g. still sick, more kittens found), call flag_urgent.
+- This note is what closes the case above - don't call flag_urgent for the same problem it describes,
+  however it reads. "Took it to the vet", "resting" or "keeping an eye on her" all close the case; they
+  don't reopen it. Only call flag_urgent for a genuinely different, still-open problem the note raises
+  (a different symptom, or more kittens found elsewhere) - not the one that was just handled.
 - To act on a cat other than the case's cat, call list_colony_cats to find it. If you can't tell which cat, do nothing.
 - If the note needs no change, do nothing.
 

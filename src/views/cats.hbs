@@ -1,4 +1,4 @@
-{{#expect cats, show, colonyFlags, totals, colonies, notifications}}
+{{#expect cats, show, colonyFlags, totals, colonies, colonyId, notifications}}
 {{#var back = '/admin/cats' + (show ? '?show=' + show : '')}}
 <!doctype html>
 <html lang="en">
@@ -22,6 +22,25 @@
     <div><strong>{{ totals.fixed_by_us ?? 0 }}</strong>fixed by us ({{ totals.fixed_this_year ?? 0 }} this year)</div>
     <div><strong>{{ totals.adopted ?? 0 }}</strong>adopted</div>
   </div>
+
+  <details id="add-cat" {{ colonyId ? 'open' : '' }}>
+    <summary>Add a cat</summary>
+    <form class="inline" method="post" action="/admin/cats">
+      <label>Colony
+        <select name="colony_id" required>
+          <option value="">Pick a colony…</option>
+          {{#each colonies as colony}}
+            <option value="{{ colony.id }}" {{ String(colony.id) === colonyId ? 'selected' : '' }}>{{ colony.name }}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>Name <input name="name"></label>
+      <label>Coat <input name="coat" placeholder="e.g. gray tabby" required></label>
+      <label>Markings <input name="markings"></label>
+      <label><input type="checkbox" name="fixed" value="1"> Already fixed</label>
+      <button>Add</button>
+    </form>
+  </details>
 
   {{#if colonyFlags.length > 0}}
     <h2>Urgent for a whole colony</h2>

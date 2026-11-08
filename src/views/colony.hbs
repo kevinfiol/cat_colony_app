@@ -1,4 +1,4 @@
-{{#expect colony, cats, flags, handled, feedings, notifications}}
+{{#expect colony, cats, flags, handled, feedings, past, notifications}}
 {{#var back = '/admin/colonies/' + colony.id}}
 {{#var lastFed = feedings[0]}}
 <!doctype html>
@@ -31,8 +31,10 @@
     </div>
   </div>
 
-  {{#if flags.length > 0}}
-    <h2>Urgent</h2>
+  <h2>Urgent</h2>
+  {{#if flags.length === 0}}
+    <p>✓ Nothing urgent here.</p>
+  {{#else}}
     <ul>
       {{#each flags as flag}}
         <li class="urgent">
@@ -51,6 +53,7 @@
   {{/if}}
 
   <h2>Cats</h2>
+  <p><a href="/admin/cats?colony_id={{ colony.id }}#add-cat">+ Add a cat to {{ colony.name }}</a></p>
   {{#if cats.length === 0}}
     <p>No cats reported yet.</p>
   {{#else}}
@@ -92,7 +95,21 @@
     </ul>
   {{/if}}
 
+  {{#if past.length > 0}}
+    <details>
+      <summary>Past cats ({{ past.length }})</summary>
+      <ul>
+        {{#each past as cat}}
+          <li><a href="/admin/cats/{{ cat.id }}">{{ cat.name || cat.coat }}</a> · {{ cat.status }}</li>
+        {{/each}}
+      </ul>
+    </details>
+  {{/if}}
+
   <h2>Feedings</h2>
+  <form class="inline" method="post" action="/admin/colonies/{{ colony.id }}/feedings">
+    <button>Log a feeding</button>
+  </form>
   {{#if feedings.length === 0}}
     <p>No feedings logged.</p>
   {{#else}}

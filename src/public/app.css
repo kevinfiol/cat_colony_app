@@ -45,6 +45,15 @@ button {
 button:disabled {
   cursor: progress;
 }
+/* Dismissive actions (ignore/reject/not the same cat) stay reachable but visually quieter,
+   so they don't compete with the constructive action next to them and get misclicked. */
+button[value='reject'],
+button[value='not_same'],
+button[name='approved'][value='0'] {
+  background: none;
+  border: 1px solid #ccc;
+  color: #555;
+}
 :focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 2px;
@@ -68,6 +77,12 @@ form.inline {
 }
 form.inline input:not([type='hidden']) {
   flex: 1 1 12rem;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
 }
 .stats {
   display: flex;
@@ -103,6 +118,18 @@ form.inline input:not([type='hidden']) {
 }
 .hint {
   color: #555;
+}
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: 0.5rem;
+}
+.photo-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  display: block;
 }
 summary {
   cursor: pointer;
