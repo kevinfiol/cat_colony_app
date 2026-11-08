@@ -2,6 +2,7 @@
 // Usage: pnpm migrate (DB_PATH picks the database, default data/app.db)
 import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 const DB_PATH = process.env.DB_PATH || 'data/app.db';
@@ -10,7 +11,7 @@ const db = new DatabaseSync(DB_PATH);
 
 // Migration files start with a number and an underscore, e.g. 001_create_rooms_table.sql
 const FILENAME_REGEX = /^\d+_.+\.sql$/;
-const directory = new URL('../migrations', import.meta.url).pathname;
+const directory = fileURLToPath(new URL('../migrations', import.meta.url));
 
 db.exec(`
   create table if not exists migrations (
