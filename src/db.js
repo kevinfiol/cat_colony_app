@@ -115,6 +115,7 @@ export function listColonyCats(colonyId) {
   return db
     .prepare(`
     SELECT c.*,
+           (SELECT id FROM cat_photos WHERE cat_id = c.id ORDER BY id DESC LIMIT 1) AS cat_photo_id,
            (SELECT COUNT(*) FROM sightings WHERE cat_id = c.id) AS sightings,
            (SELECT MAX(created_at) FROM sightings WHERE cat_id = c.id) AS last_seen_at,
            (SELECT group_concat(REPLACE(kind, '_', ' '), ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags
@@ -223,6 +224,7 @@ export function listAllCats() {
     .prepare(`
     SELECT c.*, col.name AS colony_name, same.id AS same_id, same.name AS same_name, same.coat AS same_coat,
            same.photo_message_id AS same_photo_message_id,
+           (SELECT id FROM cat_photos WHERE cat_id = c.id ORDER BY id DESC LIMIT 1) AS cat_photo_id,
            (SELECT COUNT(*) FROM sightings WHERE cat_id = c.id) AS sightings,
            (SELECT MAX(created_at) FROM sightings WHERE cat_id = c.id) AS last_seen_at,
            (SELECT group_concat(REPLACE(kind, '_', ' '), ', ') FROM flags WHERE cat_id = c.id AND resolved_at IS NULL) AS open_flags

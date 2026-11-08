@@ -76,7 +76,8 @@
     <ul>
       {{#each cats as cat}}
         <li class="cat {{ cat.open_flags ? 'urgent' : cat.status === 'pending' ? 'new' : '' }}">
-          {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}" loading="lazy">{{/if}}
+          {{#var photoUrl = cat.cat_photo_id ? '/cat-photos/' + cat.cat_photo_id : cat.photo_message_id ? '/photos/' + cat.photo_message_id : null}}
+          {{#if photoUrl}}<img src="{{ photoUrl }}" alt="{{ cat.coat }}" loading="lazy">{{/if}}
           <div>
             <p>
               <a href="/admin/cats/{{ cat.id }}"><strong>{{ cat.name || cat.coat }}</strong></a>

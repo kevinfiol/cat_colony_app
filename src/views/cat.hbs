@@ -33,7 +33,8 @@
       <main class="content">
   <p><a href="/admin/colonies/{{ cat.colony_id }}">← {{ cat.colony_name }}</a></p>
   <h1>{{ cat.name || cat.coat }}</h1>
-  {{#if cat.photo_message_id}}<img class="photo" src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}">{{/if}}
+  {{#var heroPhoto = photos[0]}}
+  {{#if heroPhoto}}<img class="photo" src="{{ heroPhoto.url }}" alt="{{ cat.coat }}">{{/if}}
   <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
   {{#if cat.status !== 'active'}}<p><strong>{{ cat.status === 'pending' ? 'New, not confirmed yet' : 'Marked ' + cat.status }}</strong></p>{{/if}}
   {{#if cat.fixed_at}}<p>Fixed by us <time datetime="{{ cat.fixed_at }}">{{ cat.fixed_at }} UTC</time></p>{{/if}}
