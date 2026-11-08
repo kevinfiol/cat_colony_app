@@ -136,6 +136,15 @@ export function listFeedings(colonyId) {
     .all(colonyId);
 }
 
+// roomId/messageId are set when a volunteer reports feeding the colony; null when the rescue did it.
+export function logFeeding(colonyId, roomId = null, messageId = null) {
+  db.prepare('INSERT INTO feedings (colony_id, room_id, message_id) VALUES (?, ?, ?)').run(
+    colonyId,
+    roomId,
+    messageId,
+  );
+}
+
 // Unresolved urgent cases, newest first: one colony's, or every colony's if none is given.
 export function listOpenFlags(colonyId = null) {
   return db
@@ -159,6 +168,8 @@ export function listHandledFlags(colonyId) {
     .all(colonyId);
 }
 
+export const FLAG_KINDS = ['pregnant', 'injured', 'sick', 'kittens', 'no_feeder'];
+
 export function getFlag(id) {
   return db.prepare('SELECT * FROM flags WHERE id = ?').get(id);
 }
@@ -167,6 +178,16 @@ export function resolveFlag(id, note) {
   db.prepare(
     'UPDATE flags SET resolved_at = CURRENT_TIMESTAMP, resolution = ? WHERE id = ? AND resolved_at IS NULL',
   ).run(note, id);
+}
+
+// cat_id is null for a case about the colony as a whole, e.g. a lost feeder.
+export function createFlag(colonyId, catId, kind, note) {
+  db.prepare('INSERT INTO flags (colony_id, cat_id, kind, note) VALUES (?, ?, ?, ?)').run(
+    colonyId,
+    catId,
+    kind,
+    note,
+  );
 }
 
 // Every cat except ignored reports, with its colony and any cat it might be.
@@ -185,6 +206,25 @@ export function listAllCats() {
     ORDER BY open_flags IS NULL, same.id IS NULL, c.status = 'pending' DESC, c.id DESC
   `)
     .all();
+}
+
+// Registers a cat the rescue already knows is real (status defaults to 'active'), or one an
+// agent is still reporting (status 'pending', with photoMessageId/maybeSameAs from the sighting).
+export function createCat(
+  colonyId,
+  { name = null, coat, markings = null, fixed = false, photoMessageId = null, maybeSameAs = null, status = 'active' },
+) {
+  const { lastInsertRowid } = db
+    .prepare(`
+      INSERT INTO cats (colony_id, name, coat, markings, fixed, photo_message_id, maybe_same_as, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(colonyId, name, coat, markings, fixed ? 1 : 0, photoMessageId, maybeSameAs, status);
+  const catId = Number(lastInsertRowid);
+  // A pending cat gets its first "Reported" entry from the sighting the caller logs; an active
+  // one, added directly by the rescue, has no sighting, so it needs its own history entry.
+  if (status === 'active') logCatEvent(catId, 'Added by rescue');
+  return catId;
 }
 
 export function getCat(id) {
@@ -220,6 +260,25 @@ export function listCatHistory(catId) {
 
 export function logCatEvent(catId, what, note = null) {
   db.prepare('INSERT INTO cat_events (cat_id, what, note) VALUES (?, ?, ?)').run(catId, what, note);
+}
+
+// A photo the rescue attached directly to a cat, outside the chat/sighting pipeline.
+export function addCatPhoto(catId, photo, photoType) {
+  const { lastInsertRowid } = db
+    .prepare('INSERT INTO cat_photos (cat_id, photo, photo_type) VALUES (?, ?, ?)')
+    .run(catId, photo, photoType);
+  logCatEvent(catId, 'Photo added');
+  return Number(lastInsertRowid);
+}
+
+export function listCatPhotos(catId) {
+  return db
+    .prepare('SELECT id, created_at FROM cat_photos WHERE cat_id = ? ORDER BY id DESC')
+    .all(catId);
+}
+
+export function getCatPhoto(id) {
+  return db.prepare('SELECT photo, photo_type FROM cat_photos WHERE id = ?').get(id);
 }
 
 // Totals across all colonies, for the team and for sponsors.
@@ -264,6 +323,19 @@ export function clearSameCat(catId) {
   db.prepare('UPDATE cats SET maybe_same_as = NULL WHERE id = ?').run(catId);
 }
 
+export const CAT_STATUSES = ['pending', 'active', 'adopted', 'missing', 'deceased', 'rejected'];
+
+// Edits a cat's own details (not its status, colony or fixed state - those have their own actions).
+export function updateCat(catId, { name, coat, markings }) {
+  db.prepare('UPDATE cats SET name = ?, coat = ?, markings = ? WHERE id = ?').run(
+    name,
+    coat,
+    markings,
+    catId,
+  );
+  logCatEvent(catId, 'Edited details');
+}
+
 const STATUS_EVENTS = { active: 'Added to colony', rejected: 'Ignored' };
 
 export function setCatStatus(catId, status) {
@@ -292,6 +364,21 @@ export function createColony(name, description, address, lat, lng) {
   db.prepare(
     'INSERT INTO colonies (name, description, address, lat, lng) VALUES (?, ?, ?, ?, ?)',
   ).run(name, description, address, lat, lng);
+}
+
+// A colony's cats that are no longer current (adopted, missing or deceased), newest first -
+// kept visible as history, not just reachable by direct link. Excludes rejected reports, which
+// were never a confirmed cat.
+export function listPastCats(colonyId) {
+  return db
+    .prepare(`
+    SELECT c.*,
+           (SELECT COUNT(*) FROM sightings WHERE cat_id = c.id) AS sightings,
+           (SELECT MAX(created_at) FROM sightings WHERE cat_id = c.id) AS last_seen_at
+    FROM cats c WHERE c.colony_id = ? AND c.status IN ('adopted', 'missing', 'deceased')
+    ORDER BY c.id DESC
+  `)
+    .all(colonyId);
 }
 
 export function listPendingApprovals() {

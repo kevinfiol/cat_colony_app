@@ -1,6 +1,17 @@
 import { Agent, run, tool, RunState, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { db, addMessage, getCat, getPhoto, markFixed, setCatStatus as setStatus } from './db.js';
+import {
+  db,
+  addMessage,
+  getCat,
+  getPhoto,
+  markFixed,
+  setCatStatus as setStatus,
+  createCat as createCatRow,
+  logFeeding as logFeedingRow,
+  createFlag,
+  FLAG_KINDS,
+} from './db.js';
 
 // Traces would send colony locations and feeder details to OpenAI's dashboard.
 setTracingDisabled(true);
@@ -83,21 +94,15 @@ const createCat = tool({
   }),
   execute: ({ colony_id, name, coat, markings, fixed, note, maybe_same_as }, runContext) => {
     const { messageId, hasPhoto } = current(runContext);
-    const { lastInsertRowid } = db
-      .prepare(`
-        INSERT INTO cats (colony_id, name, coat, markings, fixed, photo_message_id, maybe_same_as, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-      `)
-      .run(
-        colony_id,
-        name,
-        coat,
-        markings,
-        fixed ? 1 : 0,
-        hasPhoto ? messageId : null,
-        maybe_same_as,
-      );
-    const catId = Number(lastInsertRowid);
+    const catId = createCatRow(colony_id, {
+      name,
+      coat,
+      markings,
+      fixed,
+      photoMessageId: hasPhoto ? messageId : null,
+      maybeSameAs: maybe_same_as,
+      status: 'pending',
+    });
     db.prepare('INSERT INTO sightings (cat_id, message_id, note) VALUES (?, ?, ?)').run(
       catId,
       messageId,
@@ -149,11 +154,7 @@ const logFeeding = tool({
   parameters: z.object({ colony_id: z.number() }),
   execute: ({ colony_id }, runContext) => {
     const { roomId, messageId } = current(runContext);
-    db.prepare('INSERT INTO feedings (colony_id, room_id, message_id) VALUES (?, ?, ?)').run(
-      colony_id,
-      roomId,
-      messageId,
-    );
+    logFeedingRow(colony_id, roomId, messageId);
     return 'Logged.';
   },
 });
@@ -164,16 +165,11 @@ const flagUrgent = tool({
   parameters: z.object({
     colony_id: z.number(),
     cat_id: z.number().nullable(),
-    kind: z.enum(['pregnant', 'injured', 'sick', 'kittens', 'no_feeder']),
+    kind: z.enum(FLAG_KINDS),
     note: z.string(),
   }),
   execute: ({ colony_id, cat_id, kind, note }) => {
-    db.prepare('INSERT INTO flags (colony_id, cat_id, kind, note) VALUES (?, ?, ?, ?)').run(
-      colony_id,
-      cat_id,
-      kind,
-      note,
-    );
+    createFlag(colony_id, cat_id, kind, note);
     return 'Flagged.';
   },
 });
@@ -358,7 +354,7 @@ const logRescueFeeding = tool({
   description: 'Log that the rescue fed a colony.',
   parameters: z.object({ colony_id: z.number() }),
   execute: ({ colony_id }) => {
-    db.prepare('INSERT INTO feedings (colony_id) VALUES (?)').run(colony_id);
+    logFeedingRow(colony_id);
     return 'Logged.';
   },
 });

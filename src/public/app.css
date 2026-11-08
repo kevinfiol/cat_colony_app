@@ -104,6 +104,18 @@ form.inline input:not([type='hidden']) {
 .hint {
   color: #555;
 }
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: 0.5rem;
+}
+.photo-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  display: block;
+}
 summary {
   cursor: pointer;
 }

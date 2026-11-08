@@ -76,9 +76,9 @@ Read it. The core:
 - Admin happens by chat, e.g. "add volunteer Maria 305…".
 - Hosted on free tiers, no servers. A small model keeps API costs low.
 
-**Agents SDK shape**
-- An intake agent uses tools: `find_colony`, `match_cat`, `log_sighting`, `log_feeding`, `flag_urgent`.
-- `merge_cats`, `mark_adopted` and `mark_missing` require approval. Approvals pause the run until a person approves or rejects the action.
+**Agents SDK shape** (the actual, current tool list — every tool below has a matching manual action in the admin UI, so a person can always do anything the agent can do)
+- "Cat line" (runs on a volunteer's chat message): `list_colonies`, `list_colony_cats`, `show_cat_photo` - read-only, same as browsing `/admin/colonies` and `/admin/cats`. `create_cat` - same as the admin's "Add a cat" form. `log_sighting` - its detail updates are the same as the admin's "Edit details" form. `log_feeding` - same as the admin's "Log a feeding" button. `flag_urgent` - same as the admin's "Raise a flag" form. `suggest_same_cat` - the admin reaches the same outcome directly via "Same cat as → Merge". `set_cat_status` - same as the admin's "Set status" control, but still **requires approval** when the agent proposes it; a person approves or rejects via the admin's pending-approvals queue before it takes effect.
+- "Rescue notes" (runs on a staff member's own resolution note, so no extra approval is needed - a person already wrote it): `list_colony_cats` (read-only), `mark_fixed` (admin's "Fixed (TNR done)" button), `set_cat_status` (admin's "Set status" control), `log_feeding` (admin's "Log a feeding" button), `flag_urgent` (admin's "Raise a flag" form).
 - An output guardrail stops locations and phone numbers from reaching anyone outside the team.
 - Codex builds the code, the fake dataset and the tests.
 

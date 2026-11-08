@@ -164,6 +164,17 @@ const app = new H3({ onError: errorPage })
     }
     if (action === 'note' && note) db.logCatEvent(id, 'Note', note);
     if (action === 'not_same') db.clearSameCat(id);
+    if (action === 'edit') {
+      const coat = form.get('coat')?.trim();
+      if (!coat) throw new HTTPError({ status: 400, message: 'A cat needs a coat description' });
+      db.updateCat(id, {
+        name: form.get('name')?.trim() || null,
+        coat,
+        markings: form.get('markings')?.trim() || null,
+      });
+    }
+    const status = form.get('status');
+    if (action === 'set_status' && db.CAT_STATUSES.includes(status)) db.setCatStatus(id, status);
     notifyAdmins();
     let back = form.get('back');
     // A merged record is gone, so show the cat it was merged into instead.
@@ -179,7 +190,7 @@ const app = new H3({ onError: errorPage })
   })
 
   .get('/admin/cats', (event) => {
-    const show = getQuery(event).show;
+    const { show, colony_id: colonyId } = getQuery(event);
     const filters = {
       urgent: (cat) => cat.open_flags,
       tnr: (cat) => !cat.fixed && ['active', 'pending'].includes(cat.status),
@@ -190,21 +201,67 @@ const app = new H3({ onError: errorPage })
     // Urgent cases about a whole colony, e.g. kittens or a lost feeder; cat ones show on the cat.
     const colonyFlags = db.listOpenFlags().filter((flag) => !flag.cat_id);
     return page(
-      catsView({ cats, show, colonyFlags, totals: db.catTotals(), colonies: db.listColonies() }),
+      catsView({
+        cats,
+        show,
+        colonyFlags,
+        totals: db.catTotals(),
+        colonies: db.listColonies(),
+        colonyId: colonyId ?? null,
+      }),
     );
+  })
+
+  // Adds a cat the rescue already knows is real - skips the pending/confirm step.
+  .post('/admin/cats', async (event) => {
+    const form = await event.req.formData();
+    const colonyId = Number(form.get('colony_id'));
+    if (!db.getColony(colonyId)) throw new HTTPError({ status: 400, message: 'Pick a colony' });
+    const coat = form.get('coat')?.trim();
+    if (!coat) throw new HTTPError({ status: 400, message: 'A cat needs a coat description' });
+    const catId = db.createCat(colonyId, {
+      name: form.get('name')?.trim() || null,
+      coat,
+      markings: form.get('markings')?.trim() || null,
+      fixed: form.get('fixed') === '1',
+      status: 'active',
+    });
+    notifyAdmins();
+    return redirect(`/admin/cats/${catId}`);
   })
 
   .get('/admin/cats/:id', (event) => {
     const cat = db.getCat(getRouterParam(event, 'id'));
     if (!cat) throw new HTTPError({ status: 404, message: 'Cat not found' });
+    const history = db.listCatHistory(cat.id);
+    // Every photo of this cat: sighting photos from chat, and ones the rescue uploaded directly.
+    const photos = [
+      ...history.filter((entry) => entry.has_photo).map((h) => ({ url: `/photos/${h.message_id}`, at: h.at })),
+      ...db.listCatPhotos(cat.id).map((p) => ({ url: `/cat-photos/${p.id}`, at: p.created_at })),
+    ].sort((a, b) => (a.at < b.at ? 1 : -1));
     return page(
       catView({
         cat,
-        history: db.listCatHistory(cat.id),
+        history,
+        photos,
+        statuses: db.CAT_STATUSES,
         colonies: db.listColonies(),
         others: db.listColonyCats(cat.colony_id).filter((other) => other.id !== cat.id),
       }),
     );
+  })
+
+  // A photo the rescue attached directly to a cat.
+  .post('/admin/cats/:id/photos', async (event) => {
+    const id = Number(getRouterParam(event, 'id'));
+    if (!db.getCat(id)) throw new HTTPError({ status: 404, message: 'Cat not found' });
+    const form = await event.req.formData();
+    const file = form.get('photo');
+    const isImage = file?.size > 0 && file.type.startsWith('image/') && file.type !== 'image/svg+xml';
+    if (!isImage) throw new HTTPError({ status: 400, message: 'Choose an image to upload.' });
+    db.addCatPhoto(id, new Uint8Array(await file.arrayBuffer()), file.type);
+    notifyAdmins();
+    return redirect(`/admin/cats/${id}`);
   })
 
   .get('/admin/colonies', () => page(coloniesView({ colonies: db.listColonies() })))
@@ -232,8 +289,17 @@ const app = new H3({ onError: errorPage })
         flags: db.listOpenFlags(colony.id),
         handled: db.listHandledFlags(colony.id),
         feedings: db.listFeedings(colony.id),
+        past: db.listPastCats(colony.id),
       }),
     );
+  })
+
+  .post('/admin/colonies/:id/feedings', async (event) => {
+    const colonyId = Number(getRouterParam(event, 'id'));
+    if (!db.getColony(colonyId)) throw new HTTPError({ status: 404, message: 'Colony not found' });
+    db.logFeeding(colonyId);
+    notifyAdmins();
+    return redirect(`/admin/colonies/${colonyId}`);
   })
 
   .get('/admin/events', (event) => subscribe(event, 'admin'))
@@ -286,6 +352,14 @@ const app = new H3({ onError: errorPage })
 
   .get('/photos/:id', (event) => {
     const row = db.getPhoto(getRouterParam(event, 'id'));
+    if (!row) throw new HTTPError({ status: 404, message: 'Photo not found' });
+    return new Response(row.photo, {
+      headers: { 'Content-Type': row.photo_type, 'X-Content-Type-Options': 'nosniff' },
+    });
+  })
+
+  .get('/cat-photos/:id', (event) => {
+    const row = db.getCatPhoto(getRouterParam(event, 'id'));
     if (!row) throw new HTTPError({ status: 404, message: 'Photo not found' });
     return new Response(row.photo, {
       headers: { 'Content-Type': row.photo_type, 'X-Content-Type-Options': 'nosniff' },

@@ -1,4 +1,4 @@
-{{#expect cat, history, colonies, others}}
+{{#expect cat, history, photos, statuses, colonies, others}}
 {{#var back = '/admin/cats/' + cat.id}}
 <!doctype html>
 <html lang="en">
@@ -21,6 +21,26 @@
   <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
   {{#if cat.status !== 'active'}}<p><strong>{{ cat.status === 'pending' ? 'New, not confirmed yet' : 'Marked ' + cat.status }}</strong></p>{{/if}}
   {{#if cat.fixed_at}}<p>Fixed by us <time datetime="{{ cat.fixed_at }}">{{ cat.fixed_at }} UTC</time></p>{{/if}}
+
+  <details>
+    <summary>Edit details</summary>
+    <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <label>Name <input name="name" value="{{ cat.name }}"></label>
+      <label>Coat <input name="coat" value="{{ cat.coat }}" required></label>
+      <label>Markings <input name="markings" value="{{ cat.markings }}"></label>
+      <button name="action" value="edit">Save</button>
+    </form>
+    <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <label>Status
+        <select name="status">
+          {{#each statuses as s}}<option value="{{ s }}" {{ s === cat.status ? 'selected' : '' }}>{{ s }}</option>{{/each}}
+        </select>
+      </label>
+      <button name="action" value="set_status" data-confirm="Change {{ cat.name || cat.coat }}'s status?">Set status</button>
+    </form>
+  </details>
 
   {{#if cat.open_flags}}
     <section class="urgent">
@@ -81,6 +101,21 @@
       <p class="hint">No other cats in {{ cat.colony_name }} to merge with. Move this one first if its twin is in another colony.</p>
     {{/if}}
   </details>
+
+  <h2>Photos</h2>
+  <form class="inline" method="post" action="/admin/cats/{{ cat.id }}/photos" enctype="multipart/form-data">
+    <input type="file" name="photo" accept="image/*" required>
+    <button>Upload photo</button>
+  </form>
+  {{#if photos.length > 0}}
+    <div class="photo-grid">
+      {{#each photos as p}}
+        <a href="{{ p.url }}" target="_blank"><img src="{{ p.url }}" alt="" loading="lazy"></a>
+      {{/each}}
+    </div>
+  {{#else}}
+    <p class="hint">No photos yet.</p>
+  {{/if}}
 
   <h2>History</h2>
   <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
