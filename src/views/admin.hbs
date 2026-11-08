@@ -1,45 +1,35 @@
 {{#expect rooms, approvals, newCats, flags}}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin · Chat rooms</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-    ul { list-style: none; padding: 0; }
-    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
-    .preview { color: #555; margin: 0.25rem 0; }
-    small { color: #888; }
-    .cat { display: flex; gap: 0.75rem; }
-    .cat img { width: 5rem; height: 5rem; object-fit: cover; border-radius: 0.5rem; }
-    .cat p { margin: 0.25rem 0; }
-    form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-    li.urgent { background: #fde2e2; }
-    li.unread { animation: blink 1.5s ease-in-out infinite alternate; }
-    @keyframes blink { from { background: transparent; } to { background: #fde2e2; } }
-    @media (prefers-reduced-motion: reduce) {
-      li.unread { animation: none; background: #fde2e2; }
-    }
-  </style>
+  <title>Admin · Today</title>
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <p><a href="/admin/colonies">Colonies</a> · <a href="/admin/cats">Cats</a></p>
+  <nav><a href="/admin" aria-current="page">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
 
   <main id="live">
+  <h1>Today</h1>
+
+  {{#if flags.length === 0 && newCats.length === 0 && approvals.length === 0}}
+    <p>✓ All caught up. Nothing urgent or waiting for you.</p>
+  {{/if}}
+
   {{#if flags.length > 0}}
-    <h2>Urgent</h2>
+    <h2>Urgent ({{ flags.length }})</h2>
     <ul>
       {{#each flags as flag}}
         <li class="urgent">
           ⚠️ <strong>{{ flag.kind }}</strong> at
           <a href="/admin/colonies/{{ flag.colony_id }}">{{ flag.colony_name }}</a>
-          {{#if flag.cat_coat}}· {{ flag.cat_name || flag.cat_coat }}{{/if}}
+          {{#if flag.cat_id}}· <a href="/admin/cats/{{ flag.cat_id }}">{{ flag.cat_name || flag.cat_coat }}</a>{{/if}}
           <p>{{ flag.note }}</p>
-          <small>{{ flag.created_at }} UTC</small>
-          <form method="post" action="/admin/flags/{{ flag.id }}">
+          <small><time datetime="{{ flag.created_at }}">{{ flag.created_at }} UTC</time></small>
+          <form class="inline" method="post" action="/admin/flags/{{ flag.id }}">
             <input type="hidden" name="back" value="/admin">
-            <input name="note" placeholder="What was done? (optional)">
+            <input name="note" aria-label="What was done?" placeholder="What was done? (optional)">
             <button>Handled</button>
           </form>
         </li>
@@ -48,11 +38,11 @@
   {{/if}}
 
   {{#if newCats.length > 0}}
-    <h2>New cats</h2>
+    <h2>New cats to confirm ({{ newCats.length }})</h2>
     <ul>
       {{#each newCats as cat}}
         <li class="cat">
-          {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="">{{/if}}
+          {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}" loading="lazy">{{/if}}
           <div>
             <p>
               <a href="/admin/cats/{{ cat.id }}"><strong>{{ cat.name || cat.coat }}</strong></a> at
@@ -60,20 +50,20 @@
             </p>
             <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
             {{#if cat.open_flags}}<p>⚠️ {{ cat.open_flags }}</p>{{/if}}
-            <small>Reported {{ cat.sightings }} time(s) · {{ cat.created_at }} UTC</small>
+            <small>Reported {{ cat.sightings === 1 ? 'once' : cat.sightings + ' times' }} · <time datetime="{{ cat.created_at }}">{{ cat.created_at }} UTC</time></small>
             {{#if cat.maybe_same_as}}
               <p class="cat">
-                Maybe the same as <strong>{{ cat.same_name || cat.same_coat }}</strong>
-                {{#if cat.same_photo_message_id}}<img src="/photos/{{ cat.same_photo_message_id }}" alt="">{{/if}}
+                Maybe the same as <a href="/admin/cats/{{ cat.maybe_same_as }}"><strong>{{ cat.same_name || cat.same_coat }}</strong></a>
+                {{#if cat.same_photo_message_id}}<img src="/photos/{{ cat.same_photo_message_id }}" alt="{{ cat.same_coat }}" loading="lazy">{{/if}}
               </p>
             {{/if}}
             <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
-              <button name="action" value="register">Add to colony</button>
+              <button name="action" value="register">Add as a new cat</button>
               {{#if cat.maybe_same_as}}
                 <input type="hidden" name="into" value="{{ cat.maybe_same_as }}">
-                <button name="action" value="merge">Same cat</button>
+                <button name="action" value="merge" data-confirm="Merge this report into {{ cat.same_name || cat.same_coat }}? This can't be undone.">Same cat, merge</button>
               {{/if}}
-              <button name="action" value="reject">Ignore</button>
+              <button name="action" value="reject" data-confirm="Ignore this report? It won't be counted.">Ignore</button>
             </form>
           </div>
         </li>
@@ -82,13 +72,13 @@
   {{/if}}
 
   {{#if approvals.length > 0}}
-    <h2>Waiting for you</h2>
+    <h2>Waiting for your OK ({{ approvals.length }})</h2>
     <ul>
       {{#each approvals as approval}}
         <li>
           <p>{{ approval.summary }}</p>
-          <small>From <a href="/admin/chat/{{ approval.room_slug }}">{{ approval.room_name }}</a> · {{ approval.created_at }} UTC</small>
-          <form method="post" action="/admin/approvals/{{ approval.id }}">
+          <small>From <a href="/admin/chat/{{ approval.room_slug }}">{{ approval.room_name }}</a> · <time datetime="{{ approval.created_at }}">{{ approval.created_at }} UTC</time></small>
+          <form class="inline" method="post" action="/admin/approvals/{{ approval.id }}">
             <button name="approved" value="1">Approve</button>
             <button name="approved" value="0">Reject</button>
           </form>
@@ -97,22 +87,22 @@
     </ul>
   {{/if}}
 
-  <h1>Chat rooms</h1>
+  <h2>Chat rooms</h2>
 
-  <form method="post" action="/admin/rooms">
-    <input name="name" placeholder="Name, e.g. Maria Gomez" required>
+  <form class="inline" method="post" action="/admin/rooms">
+    <input name="name" aria-label="Volunteer's name" placeholder="Volunteer's name, e.g. Maria Gomez" required>
     <button>New chat room</button>
   </form>
 
-  <div id="rooms">
   {{#if rooms.length === 0}}
-    <p>No chat rooms yet.</p>
+    <p>No chat rooms yet. Make one for each volunteer, then send them its link.</p>
   {{#else}}
     <ul>
       {{#each rooms as room}}
-        <li class="{{ room.unread ? 'unread' : '' }}">
-          <a href="/admin/chat/{{ room.slug }}">{{ room.name || room.slug }}</a>
-          <p class="preview">
+        <li class="{{ room.unread ? 'new' : '' }}">
+          <a href="/admin/chat/{{ room.slug }}"><strong>{{ room.name || room.slug }}</strong></a>
+          {{#if room.unread}}<span class="badge">New</span>{{/if}}
+          <p class="hint">
             {{#if room.sender === 'admin'}}You:{{/if}}
             {{#if room.text}}
               {{ room.text }}
@@ -122,21 +112,36 @@
               <em>No messages yet</em>
             {{/if}}
           </p>
-          <small>{{ room.last_at }} UTC</small>
+          <small><time datetime="{{ room.last_at }}">{{ room.last_at }} UTC</time></small>
         </li>
       {{/each}}
     </ul>
   {{/if}}
-  </div>
   </main>
 
+  <script src="/app.js"></script>
   <script>
     // Re-fetch this page and swap in the new content on each server update.
-    new EventSource('/admin/events').onmessage = async () => {
-      const markup = await (await fetch('/admin')).text();
-      const doc = new DOMParser().parseFromString(markup, 'text/html');
-      document.getElementById('live').replaceWith(doc.getElementById('live'));
+    // If someone is typing or clicking in it, wait until they're done so nothing is lost.
+    let stale = false;
+    const busy = () => {
+      const live = document.getElementById('live');
+      return live.contains(document.activeElement) ||
+        [...live.querySelectorAll('input:not([type=hidden])')].some((input) => input.value);
     };
+
+    async function refresh() {
+      stale = busy();
+      if (stale) return;
+      const markup = await (await fetch('/admin')).text();
+      const live = new DOMParser().parseFromString(markup, 'text/html').getElementById('live');
+      if (busy()) return (stale = true);
+      document.getElementById('live').replaceWith(live);
+      localTimes(live);
+    }
+
+    new EventSource('/admin/events').onmessage = refresh;
+    document.addEventListener('focusout', () => stale && setTimeout(refresh, 300));
   </script>
 </body>
 </html>

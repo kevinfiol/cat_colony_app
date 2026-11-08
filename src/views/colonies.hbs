@@ -1,52 +1,57 @@
 {{#expect colonies}}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin · Colonies</title>
+  <link rel="stylesheet" href="/app.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
     #map { height: 24rem; border-radius: 0.5rem; }
-    form { display: grid; gap: 0.5rem; margin: 1rem 0; }
-    ul { list-style: none; padding: 0; }
-    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
-    small { color: #888; }
+    #add form { display: grid; gap: 0.5rem; margin: 0.5rem 0 1rem; }
+    #hint.missing { color: #b91c1c; font-weight: bold; }
   </style>
 </head>
 <body>
-  <p><a href="/admin">← Chat rooms</a> · <a href="/admin/cats">Cats</a></p>
+  <nav><a href="/admin">Today</a><a href="/admin/colonies" aria-current="page">Colonies</a><a href="/admin/cats">Cats</a></nav>
   <h1>Colonies</h1>
 
   <div id="map"></div>
 
-  <form method="post">
-    <small id="hint">Click the map to place a new colony.</small>
-    <input name="name" placeholder="Name, e.g. Laundromat" required>
-    <input name="description" placeholder="Where it is, e.g. behind the laundromat">
-    <input name="address" placeholder="Address, e.g. 701 NW 7th St, Miami, FL">
-    <input type="hidden" name="lat">
-    <input type="hidden" name="lng">
-    <button>Add colony</button>
-  </form>
+  <details id="add">
+    <summary>Add a colony</summary>
+    <form method="post">
+      <small id="hint" role="status">Click the map to place the new colony.</small>
+      <input name="name" aria-label="Name" placeholder="Name, e.g. Laundromat" required>
+      <input name="description" aria-label="Where it is" placeholder="Where it is, e.g. behind the laundromat">
+      <input name="address" aria-label="Address" placeholder="Address, e.g. 701 NW 7th St, Miami, FL">
+      <input type="hidden" name="lat">
+      <input type="hidden" name="lng">
+      <button>Add colony</button>
+    </form>
+  </details>
 
+  {{#if colonies.length === 0}}
+    <p>No colonies yet. Add the first one above.</p>
+  {{/if}}
   <ul>
     {{#each colonies as colony}}
-      <li data-lat="{{ colony.lat }}" data-lng="{{ colony.lng }}" data-name="{{ colony.name }}">
+      <li class="{{ colony.urgent ? 'urgent' : '' }}" data-lat="{{ colony.lat }}" data-lng="{{ colony.lng }}" data-name="{{ colony.name }}" data-id="{{ colony.id }}">
         <a href="/admin/colonies/{{ colony.id }}"><strong>{{ colony.name }}</strong></a>
+        {{#if colony.urgent}}<span class="badge">⚠️ {{ colony.urgent }} urgent</span>{{/if}}
         {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
         {{#if colony.address}}<p>📍 {{ colony.address }}</p>{{/if}}
         <small>
           {{ colony.cats }} cats · {{ colony.fixed }} fixed · {{ colony.cats - colony.fixed }} need TNR
           {{#if colony.new_cats}} · {{ colony.new_cats }} new{{/if}}
-          {{#if colony.urgent}} · ⚠️ {{ colony.urgent }} urgent{{/if}}
-          · last fed {{ colony.last_fed_at ? colony.last_fed_at + ' UTC' : 'never' }}
+          · last fed {{#if colony.last_fed_at}}<time datetime="{{ colony.last_fed_at }}">{{ colony.last_fed_at }} UTC</time>{{#else}}<strong>never</strong>{{/if}}
         </small>
       </li>
     {{/each}}
   </ul>
 
+  <script src="/app.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const map = L.map('map').setView([25.7617, -80.1918], 12); // Miami
@@ -55,26 +60,37 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
 
+    // Each colony's marker opens its page.
+    const markers = [];
     for (const li of document.querySelectorAll('li[data-lat]')) {
-      L.marker([li.dataset.lat, li.dataset.lng]).addTo(map).bindTooltip(li.dataset.name);
+      const marker = L.marker([li.dataset.lat, li.dataset.lng]).addTo(map).bindTooltip(li.dataset.name);
+      marker.on('click', () => (location.href = `/admin/colonies/${li.dataset.id}`));
+      markers.push(marker);
     }
+    if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds(), { padding: [30, 30], maxZoom: 15 });
 
-    // Clicking the map picks the new colony's spot.
-    const form = document.querySelector('form');
+    // Clicking the map picks the new colony's spot and opens the form.
+    const add = document.getElementById('add');
+    const form = add.querySelector('form');
+    const hint = document.getElementById('hint');
     let pick;
     map.on('click', ({ latlng }) => {
       pick?.remove();
       pick = L.circleMarker(latlng, { color: '#d33' }).addTo(map);
       form.lat.value = latlng.lat;
       form.lng.value = latlng.lng;
-      document.getElementById('hint').textContent = 'Spot picked. Name it and add it.';
+      hint.textContent = 'Spot picked. Name it and add it, or click the map again to move it.';
+      hint.classList.remove('missing');
+      add.open = true;
+      form.name.focus();
     });
 
     form.addEventListener('submit', (event) => {
-      if (!form.lat.value) {
-        event.preventDefault();
-        alert('Click the map to place the colony first.');
-      }
+      if (form.lat.value) return;
+      event.preventDefault();
+      hint.textContent = 'Click the map to place the colony first.';
+      hint.classList.add('missing');
+      document.getElementById('map').scrollIntoView({ behavior: 'smooth' });
     });
   </script>
 </body>

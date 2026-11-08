@@ -266,7 +266,9 @@ function describe(call) {
   const { cat_id, status } = JSON.parse(call.arguments);
   const cat = getCat(cat_id);
   if (!cat) return `Mark cat #${cat_id} as ${status}`;
-  const name = cat.name ? `${cat.name} (#${cat.id}, ${cat.coat})` : `the ${cat.coat} cat (#${cat.id})`;
+  const name = cat.name
+    ? `${cat.name} (#${cat.id}, ${cat.coat})`
+    : `the ${cat.coat} cat (#${cat.id})`;
   return `Mark ${name} at ${cat.colony_name} as ${status}`;
 }
 

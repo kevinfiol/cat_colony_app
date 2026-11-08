@@ -116,7 +116,11 @@ if (injured) {
   resolveFlag(injured.id, 'Trapped her and took her to the vet; leg splinted.');
   if (injured.cat_id) {
     markFixed(injured.cat_id);
-    logCatEvent(injured.cat_id, 'Note', 'Spayed during the vet visit. Returned to the church garden.');
+    logCatEvent(
+      injured.cat_id,
+      'Note',
+      'Spayed during the vet visit. Returned to the church garden.',
+    );
   }
 }
 

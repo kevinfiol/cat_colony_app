@@ -1,105 +1,197 @@
 {{#expect room, messages, isAdmin}}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chat</title>
+  <title>{{ room.name }} · Cat line</title>
+  <link rel="stylesheet" href="/app.css">
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    body { margin-bottom: 0; }
     .message { background: #f1f1f1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
-    .message img { max-width: 100%; border-radius: 0.25rem; }
-    .message p { margin: 0.25rem 0; }
+    .message img { display: block; max-width: 100%; max-height: 20rem; border-radius: 0.25rem; }
     .message.mine { background: #dbeafe; margin-left: 3rem; }
     .message:not(.mine) { margin-right: 3rem; }
-    small { color: #888; }
-    form { display: grid; gap: 0.5rem; margin-top: 1rem; }
+    .typing { color: #555; font-style: italic; }
+    /* Keeps the send box on screen while scrolling through the chat, like a messaging app. */
+    #send { position: sticky; bottom: 0; background: white; border-top: 1px solid #ddd; padding: 0.5rem 0 1rem; display: grid; gap: 0.5rem; }
+    #send textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .actions button[type=submit] { margin-left: auto; }
+    #volunteer-link { width: 100%; box-sizing: border-box; }
   </style>
 </head>
 <body>
   {{#if isAdmin}}
-    <p><a href="/admin">← All chat rooms</a></p>
+    <nav><a href="/admin">← Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
     <h1>{{ room.name }}</h1>
-    <form method="post" action="/admin/chat/{{ room.slug }}/name">
-      <input name="name" value="{{ room.name }}" required>
-      <button>Rename</button>
-    </form>
-    <p>Volunteer link: <a href="/chat/{{ room.slug }}">/chat/{{ room.slug }}</a></p>
+    <label>
+      Volunteer link. Send it to {{ room.name }}; anyone with it can post as them.
+      <span class="actions">
+        <input id="volunteer-link" readonly value="/chat/{{ room.slug }}" data-path="/chat/{{ room.slug }}">
+        <button type="button" id="copy">Copy link</button>
+      </span>
+    </label>
+    <details>
+      <summary>Rename</summary>
+      <form class="inline" method="post" action="/admin/chat/{{ room.slug }}/name">
+        <input name="name" aria-label="New name" value="{{ room.name }}" required>
+        <button>Save name</button>
+      </form>
+    </details>
   {{#else}}
-    <h1>{{ room.name }}</h1>
+    <h1>Hi {{ room.name }} 🐈</h1>
+    <p class="hint">Send a photo, your location or a quick note about the cats you saw or fed. The cat line logs it for the rescue.</p>
   {{/if}}
 
-  <div id="messages">
+  <div id="messages" aria-live="polite">
+    {{#if messages.length === 0}}
+      <p class="hint">No messages yet.</p>
+    {{/if}}
     {{#each messages as message}}
       {{#var fromRescue = message.sender !== 'volunteer'}}
       <div class="message {{ fromRescue === isAdmin ? 'mine' : '' }}">
-        <small>{{ message.sender === 'bot' ? 'Cat line' : fromRescue ? 'Rescue' : 'Volunteer' }}</small>
+        <small>{{ message.sender === 'bot' ? 'Cat line' : fromRescue ? 'Rescue' : room.name }}</small>
         {{#if message.has_photo}}
-          <img src="/photos/{{ message.id }}" alt="Uploaded photo">
+          <a href="/photos/{{ message.id }}" target="_blank"><img src="/photos/{{ message.id }}" alt="Photo sent in the chat" loading="lazy"></a>
         {{/if}}
         {{#if message.text}}
           <p>{{ message.text }}</p>
         {{/if}}
         {{#if message.lat != null}}
-          <p>📍 Location shared</p>
+          {{#if isAdmin}}
+            <p><a href="https://www.openstreetmap.org/?mlat={{ message.lat }}&mlon={{ message.lng }}#map=18/{{ message.lat }}/{{ message.lng }}" target="_blank" rel="noreferrer">📍 Location shared, open map</a></p>
+          {{#else}}
+            <p>📍 Location shared</p>
+          {{/if}}
         {{/if}}
-        <small>{{ message.created_at }} UTC</small>
+        <small><time datetime="{{ message.created_at }}">{{ message.created_at }} UTC</time></small>
       </div>
     {{/each}}
+    {{#if messages.length > 0 && messages[messages.length - 1].sender === 'volunteer'}}
+      <p class="typing">Cat line is reading…</p>
+    {{/if}}
   </div>
 
   <form id="send" method="post" enctype="multipart/form-data">
-    <textarea name="text" rows="3" placeholder="Message"></textarea>
-    <input type="file" name="photo" accept="image/*">
+    <textarea name="text" rows="2" aria-label="Message" placeholder="e.g. Fed the laundromat cats, new gray cat limping"></textarea>
     <input type="hidden" name="lat">
     <input type="hidden" name="lng">
-    <button type="button" id="locate">📍 Add my location</button>
-    <button>Send</button>
+    <div class="actions">
+      <label>📷 <input type="file" name="photo" accept="image/*" aria-label="Photo"></label>
+      <button type="button" id="locate">📍 Add my location</button>
+      <button type="submit">Send</button>
+    </div>
+    <small id="status" role="status"></small>
   </form>
 
+  <script src="/app.js"></script>
   <script>
     const form = document.getElementById('send');
+    const send = form.querySelector('[type=submit]');
+    const locate = document.getElementById('locate');
+    const status = document.getElementById('status');
+
+    const nearBottom = () => innerHeight + scrollY >= document.body.scrollHeight - 100;
+    const toBottom = () => scrollTo(0, document.body.scrollHeight);
+    toBottom();
+
+    function clearLocation() {
+      // reset() leaves hidden inputs alone, so clear the location by hand.
+      form.lat.value = form.lng.value = '';
+      locate.textContent = '📍 Add my location';
+    }
 
     // Send in the background instead of reloading the page.
     // The new message then shows up through the update stream below.
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      await fetch(form.action, { method: 'POST', body: new FormData(form) });
-      // reset() leaves hidden inputs alone, so clear the location too.
-      form.reset();
-      form.lat.value = form.lng.value = '';
-      locate.textContent = '📍 Add my location';
+      if (!form.text.value.trim() && !form.photo.files.length && !form.lat.value) {
+        status.textContent = 'Write a message, add a photo or add your location first.';
+        return form.text.focus();
+      }
+      send.disabled = true;
+      send.textContent = 'Sending…';
+      status.textContent = '';
+      try {
+        const response = await fetch(form.action, { method: 'POST', body: new FormData(form) });
+        if (!response.ok) throw new Error(response.statusText);
+        form.reset();
+        clearLocation();
+      } catch {
+        // Keep what they wrote so they can try again.
+        status.textContent = 'Couldn’t send. Check your connection and try again.';
+      } finally {
+        send.disabled = false;
+        send.textContent = 'Send';
+      }
     });
 
-    // Attaches the phone's current location to the next message.
+    // Attaches the phone's current location to the next message. Clicking again removes it.
     // Browsers only allow this over HTTPS or on localhost.
-    const locate = document.getElementById('locate');
     locate.addEventListener('click', () => {
+      if (form.lat.value) return clearLocation();
+      if (!navigator.geolocation) {
+        status.textContent = 'This browser can’t share your location.';
+        return;
+      }
+      locate.disabled = true;
       locate.textContent = 'Finding you…';
       navigator.geolocation.getCurrentPosition(
         ({ coords }) => {
           form.lat.value = coords.latitude;
           form.lng.value = coords.longitude;
-          locate.textContent = '📍 Location added';
+          locate.textContent = '📍 Location added ✕';
+          locate.disabled = false;
         },
-        () => (locate.textContent = '📍 Couldn’t get location, try again'),
+        (error) => {
+          clearLocation();
+          locate.disabled = false;
+          status.textContent = error.code === error.PERMISSION_DENIED
+            ? 'Location is blocked. Allow it in your browser settings, then try again.'
+            : 'Couldn’t find your location. Try again.';
+        },
+        { enableHighAccuracy: true, timeout: 15000 },
       );
     });
 
-    // Enter sends the message; Shift+Enter adds a new line.
-    form.text.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-        event.preventDefault();
-        event.target.form.requestSubmit();
-      }
-    });
+    // On a keyboard, Enter sends and Shift+Enter adds a new line.
+    // On phones Enter keeps adding a new line, like most messaging apps.
+    if (matchMedia('(pointer: fine)').matches) {
+      form.text.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+          event.preventDefault();
+          form.requestSubmit();
+        }
+      });
+    }
+
+    // Show the full link, ready to paste into a text to the volunteer.
+    const link = document.getElementById('volunteer-link');
+    if (link) {
+      link.value = new URL(link.dataset.path, location).href;
+      link.addEventListener('focus', () => link.select());
+      document.getElementById('copy').addEventListener('click', async (event) => {
+        link.select();
+        // The clipboard API needs HTTPS; fall back to copying the selected text.
+        try {
+          await navigator.clipboard.writeText(link.value);
+        } catch {
+          document.execCommand('copy');
+        }
+        event.target.textContent = 'Copied ✓';
+      });
+    }
 
     // Re-fetch this page and swap in the new messages on each server update.
     // Only the messages are replaced, so a half-typed reply is kept.
     new EventSource('/chat/{{ room.slug }}/events').onmessage = async () => {
+      const follow = nearBottom();
       const markup = await (await fetch(location.href)).text();
-      const doc = new DOMParser().parseFromString(markup, 'text/html');
-      document.getElementById('messages').replaceWith(doc.getElementById('messages'));
+      const messages = new DOMParser().parseFromString(markup, 'text/html').getElementById('messages');
+      document.getElementById('messages').replaceWith(messages);
+      localTimes(messages);
+      if (follow) toBottom();
     };
   </script>
 </body>

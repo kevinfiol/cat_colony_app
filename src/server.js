@@ -12,10 +12,39 @@ const colonyView = view('colony');
 const catsView = view('cats');
 const catView = view('cat');
 
-const page = (markup) =>
+const page = (markup, status = 200) =>
   new Response(markup, {
+    status,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
+
+// Shared styles and scripts, read once at startup.
+const asset = (name, type) => {
+  const body = readFileSync(`src/public/${name}`, 'utf8');
+  return () => new Response(body, { headers: { 'Content-Type': type } });
+};
+
+// A readable page instead of raw JSON when something goes wrong, e.g. a mistyped chat link.
+function errorPage(error) {
+  const status = error.status || 500;
+  // Route errors can quote the URL, so escape the message before putting it in HTML.
+  // h3's own 404 message is technical, so swap in a plain one.
+  const message = (
+    status === 404 && error.message.startsWith('Cannot find')
+      ? 'Page not found.'
+      : status < 500
+        ? error.message
+        : 'Something went wrong. Please try again.'
+  )
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;');
+  return page(
+    `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/app.css"><title>${status}</title>
+    <h1>Sorry</h1><p>${message}</p><p><a href="javascript:history.back()">← Go back</a></p>`,
+    status,
+  );
+}
 
 function requireRoom(event) {
   const room = db.getRoom(getRouterParam(event, 'slug'));
@@ -85,7 +114,9 @@ function notifyRoom(roomId) {
   notifyAdmins();
 }
 
-const app = new H3()
+const app = new H3({ onError: errorPage })
+  .get('/app.css', asset('app.css', 'text/css; charset=utf-8'))
+  .get('/app.js', asset('app.js', 'text/javascript; charset=utf-8'))
   .get('/', () => redirect('/admin'))
 
   .get('/admin', () =>
@@ -120,9 +151,8 @@ const app = new H3()
     if (action === 'register') db.setCatStatus(id, 'active');
     if (action === 'reject') db.setCatStatus(id, 'rejected');
     const into = Number(form.get('into'));
-    if (action === 'merge' && Number.isInteger(into) && into > 0 && into !== id) {
-      db.mergeCats(into, id);
-    }
+    const merging = action === 'merge' && Number.isInteger(into) && into > 0 && into !== id;
+    if (merging) db.mergeCats(into, id);
     const colonyId = Number(form.get('colony_id'));
     if (action === 'move' && db.getColony(colonyId)) db.moveCat(id, colonyId);
     if (action === 'fixed') db.markFixed(id);
@@ -135,7 +165,9 @@ const app = new H3()
     if (action === 'note' && note) db.logCatEvent(id, 'Note', note);
     if (action === 'not_same') db.clearSameCat(id);
     notifyAdmins();
-    const back = form.get('back');
+    let back = form.get('back');
+    // A merged record is gone, so show the cat it was merged into instead.
+    if (merging && back === `/admin/cats/${id}`) back = `/admin/cats/${into}`;
     return redirect(back?.startsWith('/admin') ? back : '/admin');
   })
 
@@ -165,7 +197,14 @@ const app = new H3()
   .get('/admin/cats/:id', (event) => {
     const cat = db.getCat(getRouterParam(event, 'id'));
     if (!cat) throw new HTTPError({ status: 404, message: 'Cat not found' });
-    return page(catView({ cat, history: db.listCatHistory(cat.id) }));
+    return page(
+      catView({
+        cat,
+        history: db.listCatHistory(cat.id),
+        colonies: db.listColonies(),
+        others: db.listColonyCats(cat.colony_id).filter((other) => other.id !== cat.id),
+      }),
+    );
   })
 
   .get('/admin/colonies', () => page(coloniesView({ colonies: db.listColonies() })))

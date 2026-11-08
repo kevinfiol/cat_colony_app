@@ -1,40 +1,101 @@
-{{#expect cat, history}}
+{{#expect cat, history, colonies, others}}
+{{#var back = '/admin/cats/' + cat.id}}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin · {{ cat.name || cat.coat }}</title>
+  <link rel="stylesheet" href="/app.css">
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-    ul { list-style: none; padding: 0; }
-    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
-    small { color: #888; }
-    li img { display: block; width: 100%; max-height: 24rem; object-fit: contain; border-radius: 0.5rem; }
-    p { margin: 0.25rem 0; }
+    img.photo, li img { display: block; width: 100%; max-height: 24rem; object-fit: contain; border-radius: 0.5rem; }
+    section { border: 1px solid #ddd; border-radius: 0.5rem; padding: 0.5rem 0.75rem; margin: 1rem 0; }
+    section h2 { margin: 0; font-size: 1rem; }
   </style>
 </head>
 <body>
-  <p><a href="/admin/cats">← Cats</a> · <a href="/admin/colonies/{{ cat.colony_id }}">{{ cat.colony_name }}</a></p>
-  <h1>{{ cat.name || cat.coat }} <small>#{{ cat.id }} · {{ cat.status }}</small></h1>
+  <nav><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
+  <p><a href="/admin/colonies/{{ cat.colony_id }}">← {{ cat.colony_name }}</a></p>
+  <h1>{{ cat.name || cat.coat }}</h1>
+  {{#if cat.photo_message_id}}<img class="photo" src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}">{{/if}}
   <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
-  {{#if cat.fixed_at}}<p>Fixed by us {{ cat.fixed_at }} UTC</p>{{/if}}
-  {{#if cat.open_flags}}<p>⚠️ {{ cat.open_flags }}</p>{{/if}}
+  {{#if cat.status !== 'active'}}<p><strong>{{ cat.status === 'pending' ? 'New, not confirmed yet' : 'Marked ' + cat.status }}</strong></p>{{/if}}
+  {{#if cat.fixed_at}}<p>Fixed by us <time datetime="{{ cat.fixed_at }}">{{ cat.fixed_at }} UTC</time></p>{{/if}}
+
+  {{#if cat.open_flags}}
+    <section class="urgent">
+      <h2>⚠️ Urgent: {{ cat.open_flags }}</h2>
+      <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+        <input type="hidden" name="back" value="{{ back }}">
+        <input name="note" aria-label="What was done?" placeholder="What was done? (optional)">
+        <button name="action" value="resolve">Handled</button>
+      </form>
+    </section>
+  {{/if}}
+
+  {{#if cat.status === 'pending'}}
+    <section class="new">
+      <h2>Is this a new cat?</h2>
+      <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+        <input type="hidden" name="back" value="{{ back }}">
+        <button name="action" value="register">Yes, add to {{ cat.colony_name }}</button>
+        <button name="action" value="reject" data-confirm="Ignore this report? It won't be counted.">Ignore report</button>
+      </form>
+    </section>
+  {{/if}}
+
+  {{#if !cat.fixed}}
+    <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <button name="action" value="fixed" data-confirm="Mark {{ cat.name || cat.coat }} as fixed (TNR done)?">Fixed (TNR done)</button>
+    </form>
+  {{/if}}
+
+  <details>
+    <summary>Wrong colony or duplicate record?</summary>
+    <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <label>Move to
+        <select name="colony_id">
+          {{#each colonies as colony}}
+            <option value="{{ colony.id }}" {{ colony.id === cat.colony_id ? 'selected' : '' }}>{{ colony.name }}</option>
+          {{/each}}
+        </select>
+      </label>
+      <button name="action" value="move">Move</button>
+    </form>
+    {{#if others.length > 0}}
+      <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+        <input type="hidden" name="back" value="{{ back }}">
+        <label>Same cat as
+          <select name="into" required>
+            <option value="">Pick a cat…</option>
+            {{#each others as other}}
+              <option value="{{ other.id }}" {{ other.id === cat.maybe_same_as ? 'selected' : '' }}>{{ other.name || other.coat }} · {{ other.markings }}</option>
+            {{/each}}
+          </select>
+        </label>
+        <button name="action" value="merge" data-confirm="Merge this record into the picked cat? Its history moves there and this can't be undone.">Merge</button>
+      </form>
+    {{#else}}
+      <p class="hint">No other cats in {{ cat.colony_name }} to merge with. Move this one first if its twin is in another colony.</p>
+    {{/if}}
+  </details>
 
   <h2>History</h2>
-  <form method="post" action="/admin/cats/{{ cat.id }}">
-    <input type="hidden" name="back" value="/admin/cats/{{ cat.id }}">
-    <input name="note" placeholder="Add a note, e.g. vet visit, new feeder" required>
+  <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+    <input type="hidden" name="back" value="{{ back }}">
+    <input name="note" aria-label="Note" placeholder="Add a note, e.g. vet visit, new feeder" required>
     <button name="action" value="note">Add note</button>
   </form>
   <ul>
     {{#each history as entry}}
       <li>
-        {{#if entry.has_photo}}<img src="/photos/{{ entry.message_id }}" alt="">{{/if}}
+        {{#if entry.has_photo}}<img src="/photos/{{ entry.message_id }}" alt="Reported photo" loading="lazy">{{/if}}
         <p><strong>{{ entry.what }}</strong></p>
         {{#if entry.note}}<p>{{ entry.note }}</p>{{/if}}
         <small>
-          {{ entry.at }} UTC
+          <time datetime="{{ entry.at }}">{{ entry.at }} UTC</time>
           {{#if entry.room_slug}}
             · <a href="/admin/chat/{{ entry.room_slug }}">{{ entry.room_name || 'A volunteer' }}</a>
           {{/if}}
@@ -42,5 +103,7 @@
       </li>
     {{/each}}
   </ul>
+
+  <script src="/app.js"></script>
 </body>
 </html>

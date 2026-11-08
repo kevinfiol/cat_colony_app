@@ -1,27 +1,17 @@
 {{#expect colony, cats, flags, handled, feedings}}
+{{#var back = '/admin/colonies/' + colony.id}}
+{{#var lastFed = feedings[0]}}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin · {{ colony.name }}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-    ul { list-style: none; padding: 0; }
-    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
-    small { color: #888; }
-    .stats { display: flex; flex-wrap: wrap; gap: 1rem; }
-    .stats div { background: #f4f4f4; border-radius: 0.5rem; padding: 0.5rem 0.75rem; }
-    .stats strong { display: block; font-size: 1.5rem; }
-    .cat { display: flex; gap: 0.75rem; }
-    .cat img { width: 5rem; height: 5rem; object-fit: cover; border-radius: 0.5rem; }
-    .cat p { margin: 0.25rem 0; }
-    .new { background: #fff6d6; }
-    form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-  </style>
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <p><a href="/admin/colonies">← Colonies</a> · <a href="/admin/cats">Cats</a></p>
+  <nav><a href="/admin">Today</a><a href="/admin/colonies">Colonies</a><a href="/admin/cats">Cats</a></nav>
+  <p><a href="/admin/colonies">← All colonies</a></p>
   <h1>{{ colony.name }}</h1>
   {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
   {{#if colony.address}}<p>📍 {{ colony.address }}</p>{{/if}}
@@ -30,21 +20,28 @@
     <div><strong>{{ colony.cats }}</strong>cats</div>
     <div><strong>{{ colony.fixed }}</strong>fixed</div>
     <div><strong>{{ colony.cats - colony.fixed }}</strong>need TNR</div>
-    <div><strong>{{ colony.urgent }}</strong>urgent</div>
+    <div class="{{ colony.urgent ? 'urgent' : '' }}"><strong>{{ colony.urgent }}</strong>urgent</div>
+    <div class="{{ lastFed ? '' : 'urgent' }}">
+      {{#if lastFed}}
+        <strong><time datetime="{{ lastFed.created_at }}">{{ lastFed.created_at }} UTC</time></strong>last fed, by {{ lastFed.name || 'the rescue' }}
+      {{#else}}
+        <strong>Never</strong>fed, as far as we know
+      {{/if}}
+    </div>
   </div>
 
   {{#if flags.length > 0}}
     <h2>Urgent</h2>
     <ul>
       {{#each flags as flag}}
-        <li>
+        <li class="urgent">
           ⚠️ <strong>{{ flag.kind }}</strong>
-          {{#if flag.cat_coat}}· {{ flag.cat_name || flag.cat_coat }}{{/if}}
+          {{#if flag.cat_id}}· <a href="/admin/cats/{{ flag.cat_id }}">{{ flag.cat_name || flag.cat_coat }}</a>{{/if}}
           <p>{{ flag.note }}</p>
-          <small>{{ flag.created_at }} UTC</small>
-          <form method="post" action="/admin/flags/{{ flag.id }}">
-            <input type="hidden" name="back" value="/admin/colonies/{{ colony.id }}">
-            <input name="note" placeholder="What was done? (optional)">
+          <small><time datetime="{{ flag.created_at }}">{{ flag.created_at }} UTC</time></small>
+          <form class="inline" method="post" action="/admin/flags/{{ flag.id }}">
+            <input type="hidden" name="back" value="{{ back }}">
+            <input name="note" aria-label="What was done?" placeholder="What was done? (optional)">
             <button>Handled</button>
           </form>
         </li>
@@ -58,8 +55,8 @@
   {{#else}}
     <ul>
       {{#each cats as cat}}
-        <li class="cat {{ cat.status === 'pending' ? 'new' : '' }}">
-          {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="">{{/if}}
+        <li class="cat {{ cat.open_flags ? 'urgent' : cat.status === 'pending' ? 'new' : '' }}">
+          {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="{{ cat.coat }}" loading="lazy">{{/if}}
           <div>
             <p>
               <a href="/admin/cats/{{ cat.id }}"><strong>{{ cat.name || cat.coat }}</strong></a>
@@ -67,40 +64,28 @@
             </p>
             <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
             {{#if cat.open_flags}}<p>⚠️ {{ cat.open_flags }}</p>{{/if}}
-            <small>Seen {{ cat.sightings }} time(s) · last {{ cat.last_seen_at }} UTC</small>
+            <small>
+              Seen {{ cat.sightings === 1 ? 'once' : cat.sightings + ' times' }}
+              {{#if cat.last_seen_at}}· last <time datetime="{{ cat.last_seen_at }}">{{ cat.last_seen_at }} UTC</time>{{/if}}
+            </small>
             {{#if cat.status === 'pending'}}
+              {{#var known = cats.filter((other) => other.status === 'active')}}
               <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
-                <input type="hidden" name="back" value="/admin/colonies/{{ colony.id }}">
-                <button name="action" value="register">Add to colony</button>
-                <select name="into">
-                  {{#each cats as other}}
-                    {{#if other.status === 'active'}}
-                      <option value="{{ other.id }}" {{ other.id === cat.maybe_same_as ? 'selected' : '' }}>
-                        {{ other.name || other.coat }} (#{{ other.id }})
-                      </option>
-                    {{/if}}
-                  {{/each}}
-                </select>
-                <button name="action" value="merge">Same cat as selected</button>
-                <button name="action" value="reject">Ignore</button>
+                <input type="hidden" name="back" value="{{ back }}">
+                <button name="action" value="register" formnovalidate>Add as a new cat</button>
+                <button name="action" value="reject" formnovalidate data-confirm="Ignore this report? It won't be counted.">Ignore</button>
+                {{#if known.length > 0}}
+                  <select name="into" aria-label="Same cat as" required>
+                    <option value="">Same cat as…</option>
+                    {{#each known as other}}
+                      <option value="{{ other.id }}" {{ other.id === cat.maybe_same_as ? 'selected' : '' }}>{{ other.name || other.coat }}</option>
+                    {{/each}}
+                  </select>
+                  <button name="action" value="merge" data-confirm="Merge this report into the picked cat? This can't be undone.">Merge</button>
+                {{/if}}
               </form>
             {{/if}}
           </div>
-        </li>
-      {{/each}}
-    </ul>
-  {{/if}}
-
-  {{#if handled.length > 0}}
-    <h2>Handled</h2>
-    <ul>
-      {{#each handled as flag}}
-        <li>
-          ✓ <strong>{{ flag.kind }}</strong>
-          {{#if flag.cat_coat}}· <a href="/admin/cats/{{ flag.cat_id }}">{{ flag.cat_name || flag.cat_coat }}</a>{{/if}}
-          <p>{{ flag.note }}</p>
-          {{#if flag.resolution}}<p>Done: {{ flag.resolution }}</p>{{/if}}
-          <small>Handled {{ flag.resolved_at }} UTC</small>
         </li>
       {{/each}}
     </ul>
@@ -118,10 +103,29 @@
           {{#else}}
             The rescue
           {{/if}}
-          <small>{{ feeding.created_at }} UTC</small>
+          <small><time datetime="{{ feeding.created_at }}">{{ feeding.created_at }} UTC</time></small>
         </li>
       {{/each}}
     </ul>
   {{/if}}
+
+  {{#if handled.length > 0}}
+    <details>
+      <summary>Handled urgent cases ({{ handled.length }})</summary>
+      <ul>
+        {{#each handled as flag}}
+          <li>
+            ✓ <strong>{{ flag.kind }}</strong>
+            {{#if flag.cat_id}}· <a href="/admin/cats/{{ flag.cat_id }}">{{ flag.cat_name || flag.cat_coat }}</a>{{/if}}
+            <p>{{ flag.note }}</p>
+            {{#if flag.resolution}}<p>Done: {{ flag.resolution }}</p>{{/if}}
+            <small>Handled <time datetime="{{ flag.resolved_at }}">{{ flag.resolved_at }} UTC</time></small>
+          </li>
+        {{/each}}
+      </ul>
+    </details>
+  {{/if}}
+
+  <script src="/app.js"></script>
 </body>
 </html>
