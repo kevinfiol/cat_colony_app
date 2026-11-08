@@ -1,0 +1,127 @@
+{{#expect cats, show, colonyFlags, totals, colonies}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin · Cats</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    ul { list-style: none; padding: 0; }
+    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
+    small { color: #888; }
+    .cat { display: flex; gap: 0.75rem; }
+    .cat img { width: 5rem; height: 5rem; object-fit: cover; border-radius: 0.5rem; }
+    .cat p { margin: 0.25rem 0; }
+    form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    form.inline input[type=number] { width: 4rem; }
+    .stats { display: flex; flex-wrap: wrap; gap: 1rem; }
+    .stats div { background: #f4f4f4; border-radius: 0.5rem; padding: 0.5rem 0.75rem; }
+    .stats strong { display: block; font-size: 1.5rem; }
+    .urgent { background: #fde2e2; }
+    .new { background: #fff6d6; }
+    .same { background: #e6f0ff; border-radius: 0.5rem; padding: 0.5rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p><a href="/admin">← Chat rooms</a> · <a href="/admin/colonies">Colonies</a></p>
+  <h1>Cats</h1>
+
+  <div class="stats">
+    <div><strong>{{ totals.cats ?? 0 }}</strong>cats</div>
+    <div><strong>{{ totals.fixed ?? 0 }}</strong>fixed</div>
+    <div><strong>{{ totals.need_tnr ?? 0 }}</strong>need TNR</div>
+    <div><strong>{{ totals.fixed_by_us ?? 0 }}</strong>fixed by us ({{ totals.fixed_this_year ?? 0 }} this year)</div>
+    <div><strong>{{ totals.adopted ?? 0 }}</strong>adopted</div>
+  </div>
+
+  {{#if colonyFlags.length > 0}}
+    <h2>Urgent</h2>
+    <ul>
+      {{#each colonyFlags as flag}}
+        <li class="urgent">
+          ⚠️ <strong>{{ flag.kind }}</strong> at
+          <a href="/admin/colonies/{{ flag.colony_id }}">{{ flag.colony_name }}</a>
+          {{#if flag.cat_coat}}· {{ flag.cat_name || flag.cat_coat }}{{/if}}
+          <p>{{ flag.note }}</p>
+          <small>{{ flag.created_at }} UTC</small>
+          <form method="post" action="/admin/flags/{{ flag.id }}">
+            <input type="hidden" name="back" value="/admin/cats{{ show ? '?show=' + show : '' }}">
+            <input name="note" placeholder="What was done? (optional)">
+            <button>Handled</button>
+          </form>
+        </li>
+      {{/each}}
+    </ul>
+  {{/if}}
+
+  <p>
+    Show:
+    <a href="/admin/cats">All</a> ·
+    <a href="/admin/cats?show=urgent">Urgent</a> ·
+    <a href="/admin/cats?show=same">Maybe the same</a> ·
+    <a href="/admin/cats?show=new">New</a> ·
+    <a href="/admin/cats?show=tnr">Need TNR</a>
+  </p>
+
+  {{#if cats.length === 0}}
+    <p>No cats reported yet.</p>
+  {{#else}}
+    <ul>
+      {{#each cats as cat}}
+        <li class="cat {{ cat.open_flags ? 'urgent' : cat.status === 'pending' ? 'new' : '' }}">
+          {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="">{{/if}}
+          <div>
+            <p>
+              <a href="/admin/cats/{{ cat.id }}"><strong>{{ cat.name || cat.coat }}</strong></a> (#{{ cat.id }}) at
+              <a href="/admin/colonies/{{ cat.colony_id }}">{{ cat.colony_name }}</a> · {{ cat.status }}
+            </p>
+            <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
+            {{#if cat.open_flags}}<p>⚠️ {{ cat.open_flags }}</p>{{/if}}
+            <small>Seen {{ cat.sightings }} time(s) · last {{ cat.last_seen_at || 'never' }} UTC</small>
+            {{#if cat.same_coat}}
+              <div class="same">
+                <p class="cat">
+                  Merge these two cats? This looks like
+                  <a href="/admin/cats/{{ cat.maybe_same_as }}"><strong>{{ cat.same_name || cat.same_coat }}</strong></a>
+                  (#{{ cat.maybe_same_as }})
+                  {{#if cat.same_photo_message_id}}<img src="/photos/{{ cat.same_photo_message_id }}" alt="">{{/if}}
+                </p>
+                <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+                  <input type="hidden" name="back" value="/admin/cats{{ show ? '?show=' + show : '' }}">
+                  <input type="hidden" name="into" value="{{ cat.maybe_same_as }}">
+                  <button name="action" value="merge">Merge</button>
+                  <button name="action" value="not_same">Different cats</button>
+                </form>
+              </div>
+            {{/if}}
+            <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+              <input type="hidden" name="back" value="/admin/cats{{ show ? '?show=' + show : '' }}">
+              {{#if !cat.fixed}}<button name="action" value="fixed">Fixed (TNR done)</button>{{/if}}
+              <select name="colony_id">
+                {{#each colonies as colony}}
+                  <option value="{{ colony.id }}" {{ colony.id === cat.colony_id ? 'selected' : '' }}>{{ colony.name }}</option>
+                {{/each}}
+              </select>
+              <button name="action" value="move">Move</button>
+            </form>
+            {{#if cat.open_flags}}
+              <form class="inline" method="post" action="/admin/cats/{{ cat.id }}">
+                <input type="hidden" name="back" value="/admin/cats{{ show ? '?show=' + show : '' }}">
+                <input name="note" placeholder="What was done? (optional)">
+                <button name="action" value="resolve">Urgent handled</button>
+              </form>
+            {{/if}}
+            <form class="inline" method="post" action="/admin/cats/{{ cat.id }}"
+                  onsubmit="return confirm('Merge #{{ cat.id }} into the cat with that number?')">
+              <input type="hidden" name="back" value="/admin/cats{{ show ? '?show=' + show : '' }}">
+              <label>Same cat as #<input name="into" type="number" min="1" required></label>
+              <button name="action" value="merge">Merge</button>
+            </form>
+          </div>
+        </li>
+      {{/each}}
+    </ul>
+  {{/if}}
+</body>
+</html>

@@ -1,6 +1,6 @@
 import { Agent, run, tool, RunState, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { db, addMessage, getPhoto, mergeCats as merge, setCatStatus as setStatus } from './db.js';
+import { db, addMessage, getCat, getPhoto, markFixed, setCatStatus as setStatus } from './db.js';
 
 // Traces would send colony locations and feeder details to OpenAI's dashboard.
 setTracingDisabled(true);
@@ -29,7 +29,9 @@ const listColonies = tool({
   parameters: z.object({}),
   execute: (_, runContext) => {
     const { lat, lng } = current(runContext);
-    const colonies = db.prepare('SELECT id, name, description, lat, lng FROM colonies').all();
+    const colonies = db
+      .prepare('SELECT id, name, description, address, lat, lng FROM colonies')
+      .all();
     return colonies.map(({ lat: cLat, lng: cLng, ...colony }) => ({
       ...colony,
       distance_m: lat != null && cLat != null ? distance(lat, lng, cLat, cLng) : null,
@@ -176,21 +178,26 @@ const flagUrgent = tool({
   },
 });
 
-const mergeCats = tool({
-  name: 'merge_cats',
-  description: 'Merge two records that are the same cat. A person at the rescue confirms first.',
-  parameters: z.object({ keep_cat_id: z.number(), duplicate_cat_id: z.number() }),
-  needsApproval: true,
-  execute: ({ keep_cat_id, duplicate_cat_id }) => {
-    merge(keep_cat_id, duplicate_cat_id);
-    return 'Merged.';
+const suggestSameCat = tool({
+  name: 'suggest_same_cat',
+  description:
+    'Suggest that two known cat records are likely the same cat. The rescue decides whether to merge them.',
+  parameters: z.object({ cat_id: z.number(), other_cat_id: z.number() }),
+  execute: ({ cat_id, other_cat_id }) => {
+    // The newer record points at the older one, which is kept if they're merged.
+    const [older, newer] = [cat_id, other_cat_id].sort((a, b) => a - b);
+    db.prepare('UPDATE cats SET maybe_same_as = ? WHERE id = ?').run(older, newer);
+    return 'Suggested to the rescue.';
   },
 });
 
 const setCatStatus = tool({
   name: 'set_cat_status',
-  description: 'Mark a cat adopted or missing. A person at the rescue confirms first.',
-  parameters: z.object({ cat_id: z.number(), status: z.enum(['adopted', 'missing']) }),
+  description: 'Mark a cat adopted, missing or deceased. A person at the rescue confirms first.',
+  parameters: z.object({
+    cat_id: z.number(),
+    status: z.enum(['adopted', 'missing', 'deceased']),
+  }),
   needsApproval: true,
   execute: ({ cat_id, status }) => {
     setStatus(cat_id, status);
@@ -217,11 +224,14 @@ Record what they report like a careful rescue coordinator would:
    An ear-tip (a flat, clipped ear tip) means the cat is fixed.
 3. Log a feeding if they fed the colony.
 4. Flag urgent cases: pregnant, injured, sick, new kittens, or a colony that lost its feeder.
-5. If two records turn out to be the same cat, or a cat was adopted or went missing, use
-   merge_cats or set_cat_status; a person confirms those.
+5. If two known records look like the same cat (same coat and markings, or matching photos), call
+   suggest_same_cat; the rescue decides whether to merge them.
+   If a cat was adopted, went missing (e.g. not seen for days) or died, find it in the colony's cats
+   and call set_cat_status. A person confirms those.
 
 If no colony fits or you can't tell the colony, ask one short question and record nothing yet.
-Reply in one or two short lines saying what you logged. Write in the same language as the volunteer's new message: English if they wrote in English, Spanish only if they wrote in Spanish.
+Reply in one or two short lines saying what you logged. Always write in English, even if the volunteer writes in another language.
+Write every note in English too.
 Never repeat locations or phone numbers in a reply.
 `,
   tools: [
@@ -232,7 +242,7 @@ Never repeat locations or phone numbers in a reply.
     logSighting,
     logFeeding,
     flagUrgent,
-    mergeCats,
+    suggestSameCat,
     setCatStatus,
   ],
 });
@@ -250,15 +260,23 @@ function history(roomId, beforeId) {
     .join('\n');
 }
 
+// A plain sentence for the rescue to approve, e.g. "Mark Smokey (#3, black) at Church Garden as deceased".
+// set_cat_status is the only tool that needs approval.
+function describe(call) {
+  const { cat_id, status } = JSON.parse(call.arguments);
+  const cat = getCat(cat_id);
+  if (!cat) return `Mark cat #${cat_id} as ${status}`;
+  const name = cat.name ? `${cat.name} (#${cat.id}, ${cat.coat})` : `the ${cat.coat} cat (#${cat.id})`;
+  return `Mark ${name} at ${cat.colony_name} as ${status}`;
+}
+
 // Posts the agent's reply, or holds the run for a person to approve.
 function finish(result, roomId) {
   if (result.interruptions.length === 0) {
     addMessage(roomId, 'bot', result.finalOutput);
     return;
   }
-  const summary = result.interruptions
-    .map((item) => `${item.rawItem.name} ${item.rawItem.arguments}`)
-    .join('; ');
+  const summary = result.interruptions.map((item) => describe(item.rawItem)).join('; ');
   db.prepare('INSERT INTO approvals (room_id, summary, run_state) VALUES (?, ?, ?)').run(
     roomId,
     summary,
@@ -307,4 +325,71 @@ export async function decide(approvalId, approved) {
   }
   finish(await run(agent, state), approval.room_id);
   return approval.room_id;
+}
+
+const markCatFixed = tool({
+  name: 'mark_fixed',
+  description: 'Record that the rescue spayed or neutered a cat.',
+  parameters: z.object({ cat_id: z.number() }),
+  execute: ({ cat_id }) => {
+    markFixed(cat_id);
+    return 'Marked fixed.';
+  },
+});
+
+// A person at the rescue wrote the note themselves, so no further confirmation is needed.
+const setCatStatusNow = tool({
+  name: 'set_cat_status',
+  description: 'Mark a cat adopted, missing or deceased.',
+  parameters: z.object({
+    cat_id: z.number(),
+    status: z.enum(['adopted', 'missing', 'deceased']),
+  }),
+  execute: ({ cat_id, status }) => {
+    setStatus(cat_id, status);
+    return `Marked ${status}.`;
+  },
+});
+
+const logRescueFeeding = tool({
+  name: 'log_feeding',
+  description: 'Log that the rescue fed a colony.',
+  parameters: z.object({ colony_id: z.number() }),
+  execute: ({ colony_id }) => {
+    db.prepare('INSERT INTO feedings (colony_id) VALUES (?)').run(colony_id);
+    return 'Logged.';
+  },
+});
+
+const rescueAgent = new Agent({
+  name: 'Rescue notes',
+  model: 'gpt-5.4-nano',
+  modelSettings: { reasoning: { effort: 'low' } },
+  instructions: `
+You keep the census for Mangrove Mews, a street cat rescue in Miami.
+A person at the rescue just handled an urgent case and wrote what they did. The note is already saved with the case.
+Update the census to match what they wrote, and nothing more:
+
+- If a cat was spayed or neutered, call mark_fixed.
+- If the rescue fed the colony, call log_feeding.
+- If a cat was adopted, went missing or died, call set_cat_status.
+- If something still needs the rescue's attention (e.g. still sick, more kittens found), call flag_urgent.
+- To act on a cat other than the case's cat, call list_colony_cats to find it. If you can't tell which cat, do nothing.
+- If the note needs no change, do nothing.
+
+Write any note in English.
+`,
+  tools: [listColonyCats, markCatFixed, setCatStatusNow, logRescueFeeding, flagUrgent],
+});
+
+// Updates the census from what the rescue wrote when it handled an urgent case.
+// kinds is the case's kind, e.g. 'injured', or several for a cat's cases, e.g. 'injured, sick'.
+export async function applyHandledNote(colonyId, catId, kinds, note) {
+  const colony = db.prepare('SELECT name FROM colonies WHERE id = ?').get(colonyId);
+  const cat = catId && getCat(catId);
+  const about = cat
+    ? `the cat #${cat.id} (${cat.name ?? 'no name'}, ${cat.coat}, ${cat.fixed ? 'fixed' : 'not fixed'})`
+    : 'the colony as a whole';
+  const text = `Case: ${kinds}, about ${about}, at colony #${colonyId} (${colony.name}).\nWhat the rescue did: ${note}`;
+  await run(rescueAgent, text);
 }

@@ -2,7 +2,17 @@
 // Each report goes through the agent, as if a volunteer sent it from their phone.
 // Usage: DB_PATH=data/demo.db pnpm seed
 import { readFileSync } from 'node:fs';
-import { db, createRoom, createColony, addMessage } from '../src/db.js';
+import {
+  db,
+  createRoom,
+  createColony,
+  addMessage,
+  mergeCats,
+  setCatStatus,
+  markFixed,
+  resolveFlag,
+  logCatEvent,
+} from '../src/db.js';
 import { respond } from '../src/agent.js';
 
 if (db.prepare('SELECT COUNT(*) AS n FROM colonies').get().n > 0) {
@@ -11,12 +21,30 @@ if (db.prepare('SELECT COUNT(*) AS n FROM colonies').get().n > 0) {
 }
 
 const colonies = {
-  laundromat: [25.781, -80.2105, 'Laundromat', 'Behind the laundromat, by the dryer vents'],
-  marina: [25.733, -80.233, 'Marina Lot', 'Boat yard parking lot next to the marina'],
-  church: [25.8, -80.199, 'Church Garden', 'Garden behind the church on the corner'],
+  laundromat: [
+    25.781,
+    -80.2105,
+    'Laundromat',
+    'Behind the laundromat, by the dryer vents',
+    '1234 NW 7th St, Miami, FL 33125',
+  ],
+  marina: [
+    25.733,
+    -80.233,
+    'Marina Lot',
+    'Boat yard parking lot next to the marina',
+    '2500 S Bayshore Dr, Miami, FL 33133',
+  ],
+  church: [
+    25.8,
+    -80.199,
+    'Church Garden',
+    'Garden behind the church on the corner',
+    '3100 NE 2nd Ave, Miami, FL 33137',
+  ],
 };
-for (const [lat, lng, name, description] of Object.values(colonies)) {
-  createColony(name, description, lat, lng);
+for (const [lat, lng, name, description, address] of Object.values(colonies)) {
+  createColony(name, description, address, lat, lng);
 }
 
 function volunteer(name, phone) {
@@ -71,3 +99,26 @@ for (const [roomId, text, photo, location] of reports) {
   const reply = db.prepare('SELECT text FROM messages WHERE room_id = ? ORDER BY id DESC LIMIT 1');
   console.log(`< ${reply.get(roomId).text}\n`);
 }
+
+// Confirm every reported cat, as the rescue would: likely duplicates are merged, the rest registered.
+const pending = db.prepare("SELECT id, maybe_same_as FROM cats WHERE status = 'pending'").all();
+for (const { id, maybe_same_as } of pending) {
+  if (maybe_same_as) mergeCats(maybe_same_as, id);
+  else setCatStatus(id, 'active');
+}
+
+// A few things the rescue did afterwards, so cat and colony histories have something in them.
+const openFlag = (kind) =>
+  db.prepare('SELECT id, cat_id FROM flags WHERE kind = ? AND resolved_at IS NULL').get(kind);
+
+const injured = openFlag('injured');
+if (injured) {
+  resolveFlag(injured.id, 'Trapped her and took her to the vet; leg splinted.');
+  if (injured.cat_id) {
+    markFixed(injured.cat_id);
+    logCatEvent(injured.cat_id, 'Note', 'Spayed during the vet visit. Returned to the church garden.');
+  }
+}
+
+const noFeeder = openFlag('no_feeder');
+if (noFeeder) resolveFlag(noFeeder.id, 'Dev Patel feeds the church garden now, every evening.');

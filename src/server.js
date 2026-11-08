@@ -1,14 +1,16 @@
 import { readFileSync } from 'node:fs';
-import { H3, HTTPError, EventStream, serve, redirect, getRouterParam } from 'h3';
+import { H3, HTTPError, EventStream, serve, redirect, getRouterParam, getQuery } from 'h3';
 import { compile } from 'tempura';
 import * as db from './db.js';
-import { respond, decide } from './agent.js';
+import { respond, decide, applyHandledNote } from './agent.js';
 
 const view = (name) => compile(readFileSync(`src/views/${name}.hbs`, 'utf8'));
 const adminView = view('admin');
 const chatView = view('chat');
 const coloniesView = view('colonies');
 const colonyView = view('colony');
+const catsView = view('cats');
+const catView = view('cat');
 
 const page = (markup) =>
   new Response(markup, {
@@ -54,6 +56,11 @@ function replyInBackground(roomId, messageId) {
     .finally(() => notifyRoom(roomId));
 }
 
+// Lets the agent update the census from a handled case's note, without making the admin wait.
+function applyInBackground(colonyId, catId, kinds, note) {
+  applyHandledNote(colonyId, catId, kinds, note).catch(console.error).finally(notifyAdmins);
+}
+
 // Open pages listening for updates, grouped by channel: 'admin' or a room id.
 const channels = new Map();
 
@@ -87,9 +94,23 @@ const app = new H3()
         rooms: db.listRooms(),
         approvals: db.listPendingApprovals(),
         newCats: db.listPendingCats(),
+        flags: db.listOpenFlags(),
       }),
     ),
   )
+
+  .post('/admin/flags/:id', async (event) => {
+    const form = await event.req.formData();
+    const flag = db.getFlag(getRouterParam(event, 'id'));
+    const note = form.get('note')?.trim() || null;
+    if (flag && !flag.resolved_at) {
+      db.resolveFlag(flag.id, note);
+      if (note) applyInBackground(flag.colony_id, flag.cat_id, flag.kind, note);
+    }
+    notifyAdmins();
+    const back = form.get('back');
+    return redirect(back?.startsWith('/admin') ? back : '/admin');
+  })
 
   // Confirms a newly reported cat, rejects it, or folds it into the cat it really is.
   .post('/admin/cats/:id', async (event) => {
@@ -102,6 +123,17 @@ const app = new H3()
     if (action === 'merge' && Number.isInteger(into) && into > 0 && into !== id) {
       db.mergeCats(into, id);
     }
+    const colonyId = Number(form.get('colony_id'));
+    if (action === 'move' && db.getColony(colonyId)) db.moveCat(id, colonyId);
+    if (action === 'fixed') db.markFixed(id);
+    const note = form.get('note')?.trim() || null;
+    const cat = db.getCat(id);
+    if (action === 'resolve' && cat?.open_flags) {
+      db.resolveCatFlags(id, note);
+      if (note) applyInBackground(cat.colony_id, id, cat.open_flags, note);
+    }
+    if (action === 'note' && note) db.logCatEvent(id, 'Note', note);
+    if (action === 'not_same') db.clearSameCat(id);
     notifyAdmins();
     const back = form.get('back');
     return redirect(back?.startsWith('/admin') ? back : '/admin');
@@ -114,6 +146,28 @@ const app = new H3()
     return redirect('/admin');
   })
 
+  .get('/admin/cats', (event) => {
+    const show = getQuery(event).show;
+    const filters = {
+      urgent: (cat) => cat.open_flags,
+      tnr: (cat) => !cat.fixed && ['active', 'pending'].includes(cat.status),
+      new: (cat) => cat.status === 'pending',
+      same: (cat) => cat.same_coat,
+    };
+    const cats = db.listAllCats().filter(filters[show] ?? (() => true));
+    // Urgent cases about a whole colony, e.g. kittens or a lost feeder; cat ones show on the cat.
+    const colonyFlags = db.listOpenFlags().filter((flag) => !flag.cat_id);
+    return page(
+      catsView({ cats, show, colonyFlags, totals: db.catTotals(), colonies: db.listColonies() }),
+    );
+  })
+
+  .get('/admin/cats/:id', (event) => {
+    const cat = db.getCat(getRouterParam(event, 'id'));
+    if (!cat) throw new HTTPError({ status: 404, message: 'Cat not found' });
+    return page(catView({ cat, history: db.listCatHistory(cat.id) }));
+  })
+
   .get('/admin/colonies', () => page(coloniesView({ colonies: db.listColonies() })))
 
   .post('/admin/colonies', async (event) => {
@@ -124,7 +178,8 @@ const app = new H3()
     if (!name || lat == null || lng == null) {
       throw new HTTPError({ status: 400, message: 'A colony needs a name and a spot on the map' });
     }
-    db.createColony(name, form.get('description')?.trim() || null, lat, lng);
+    const description = form.get('description')?.trim() || null;
+    db.createColony(name, description, form.get('address')?.trim() || null, lat, lng);
     return redirect('/admin/colonies');
   })
 
@@ -136,6 +191,7 @@ const app = new H3()
         colony,
         cats: db.listColonyCats(colony.id),
         flags: db.listOpenFlags(colony.id),
+        handled: db.listHandledFlags(colony.id),
         feedings: db.listFeedings(colony.id),
       }),
     );

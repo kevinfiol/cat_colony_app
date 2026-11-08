@@ -16,7 +16,7 @@
   </style>
 </head>
 <body>
-  <p><a href="/admin">← Chat rooms</a></p>
+  <p><a href="/admin">← Chat rooms</a> · <a href="/admin/cats">Cats</a></p>
   <h1>Colonies</h1>
 
   <div id="map"></div>
@@ -24,7 +24,8 @@
   <form method="post">
     <small id="hint">Click the map to place a new colony.</small>
     <input name="name" placeholder="Name, e.g. Laundromat" required>
-    <input name="description" placeholder="Where it is, e.g. behind the laundromat on NW 7th St">
+    <input name="description" placeholder="Where it is, e.g. behind the laundromat">
+    <input name="address" placeholder="Address, e.g. 701 NW 7th St, Miami, FL">
     <input type="hidden" name="lat">
     <input type="hidden" name="lng">
     <button>Add colony</button>
@@ -35,6 +36,7 @@
       <li data-lat="{{ colony.lat }}" data-lng="{{ colony.lng }}" data-name="{{ colony.name }}">
         <a href="/admin/colonies/{{ colony.id }}"><strong>{{ colony.name }}</strong></a>
         {{#if colony.description}}<p>{{ colony.description }}</p>{{/if}}
+        {{#if colony.address}}<p>📍 {{ colony.address }}</p>{{/if}}
         <small>
           {{ colony.cats }} cats · {{ colony.fixed }} fixed · {{ colony.cats - colony.fixed }} need TNR
           {{#if colony.new_cats}} · {{ colony.new_cats }} new{{/if}}

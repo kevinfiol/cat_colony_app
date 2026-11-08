@@ -1,0 +1,46 @@
+{{#expect cat, history}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin · {{ cat.name || cat.coat }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    ul { list-style: none; padding: 0; }
+    li { border-bottom: 1px solid #ddd; padding: 0.75rem 0; }
+    small { color: #888; }
+    li img { display: block; width: 100%; max-height: 24rem; object-fit: contain; border-radius: 0.5rem; }
+    p { margin: 0.25rem 0; }
+  </style>
+</head>
+<body>
+  <p><a href="/admin/cats">← Cats</a> · <a href="/admin/colonies/{{ cat.colony_id }}">{{ cat.colony_name }}</a></p>
+  <h1>{{ cat.name || cat.coat }} <small>#{{ cat.id }} · {{ cat.status }}</small></h1>
+  <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
+  {{#if cat.fixed_at}}<p>Fixed by us {{ cat.fixed_at }} UTC</p>{{/if}}
+  {{#if cat.open_flags}}<p>⚠️ {{ cat.open_flags }}</p>{{/if}}
+
+  <h2>History</h2>
+  <form method="post" action="/admin/cats/{{ cat.id }}">
+    <input type="hidden" name="back" value="/admin/cats/{{ cat.id }}">
+    <input name="note" placeholder="Add a note, e.g. vet visit, new feeder" required>
+    <button name="action" value="note">Add note</button>
+  </form>
+  <ul>
+    {{#each history as entry}}
+      <li>
+        {{#if entry.has_photo}}<img src="/photos/{{ entry.message_id }}" alt="">{{/if}}
+        <p><strong>{{ entry.what }}</strong></p>
+        {{#if entry.note}}<p>{{ entry.note }}</p>{{/if}}
+        <small>
+          {{ entry.at }} UTC
+          {{#if entry.room_slug}}
+            · <a href="/admin/chat/{{ entry.room_slug }}">{{ entry.room_name || 'A volunteer' }}</a>
+          {{/if}}
+        </small>
+      </li>
+    {{/each}}
+  </ul>
+</body>
+</html>

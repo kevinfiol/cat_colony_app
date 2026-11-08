@@ -7,7 +7,7 @@ create table if not exists cats (
   -- Ear-tipped or otherwise known to be neutered.
   fixed integer not null default 0,
   -- 'pending' (reported, not yet confirmed by the rescue), 'active', 'adopted',
-  -- 'missing' or 'rejected'
+  -- 'missing', 'deceased' or 'rejected'
   status text not null default 'pending',
   -- Best reference photo, used to recognize the cat again.
   photo_message_id integer references messages(id),

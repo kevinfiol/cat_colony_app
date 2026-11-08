@@ -1,4 +1,4 @@
-{{#expect rooms, approvals, newCats}}
+{{#expect rooms, approvals, newCats, flags}}
 <!doctype html>
 <html>
 <head>
@@ -15,6 +15,7 @@
     .cat img { width: 5rem; height: 5rem; object-fit: cover; border-radius: 0.5rem; }
     .cat p { margin: 0.25rem 0; }
     form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    li.urgent { background: #fde2e2; }
     li.unread { animation: blink 1.5s ease-in-out infinite alternate; }
     @keyframes blink { from { background: transparent; } to { background: #fde2e2; } }
     @media (prefers-reduced-motion: reduce) {
@@ -23,9 +24,29 @@
   </style>
 </head>
 <body>
-  <p><a href="/admin/colonies">Colonies</a></p>
+  <p><a href="/admin/colonies">Colonies</a> · <a href="/admin/cats">Cats</a></p>
 
   <main id="live">
+  {{#if flags.length > 0}}
+    <h2>Urgent</h2>
+    <ul>
+      {{#each flags as flag}}
+        <li class="urgent">
+          ⚠️ <strong>{{ flag.kind }}</strong> at
+          <a href="/admin/colonies/{{ flag.colony_id }}">{{ flag.colony_name }}</a>
+          {{#if flag.cat_coat}}· {{ flag.cat_name || flag.cat_coat }}{{/if}}
+          <p>{{ flag.note }}</p>
+          <small>{{ flag.created_at }} UTC</small>
+          <form method="post" action="/admin/flags/{{ flag.id }}">
+            <input type="hidden" name="back" value="/admin">
+            <input name="note" placeholder="What was done? (optional)">
+            <button>Handled</button>
+          </form>
+        </li>
+      {{/each}}
+    </ul>
+  {{/if}}
+
   {{#if newCats.length > 0}}
     <h2>New cats</h2>
     <ul>
@@ -34,7 +55,7 @@
           {{#if cat.photo_message_id}}<img src="/photos/{{ cat.photo_message_id }}" alt="">{{/if}}
           <div>
             <p>
-              <strong>{{ cat.name || cat.coat }}</strong> at
+              <a href="/admin/cats/{{ cat.id }}"><strong>{{ cat.name || cat.coat }}</strong></a> at
               <a href="/admin/colonies/{{ cat.colony_id }}">{{ cat.colony_name }}</a>
             </p>
             <p>{{ cat.coat }} · {{ cat.markings }} · {{ cat.fixed ? 'Fixed' : 'Needs TNR' }}</p>
